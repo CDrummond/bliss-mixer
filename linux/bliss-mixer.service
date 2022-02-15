@@ -1,0 +1,15 @@
+[Unit]
+Description=Bliss Music Mixer
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=pi
+ExecStart=/usr/local/bin/bliss-mixer --db /home/pi/bliss.db
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=BlissMixer
+
+[Install]
+WantedBy=multi-user.target

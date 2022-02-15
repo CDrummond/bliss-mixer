@@ -1,0 +1,24 @@
+[package]
+name = "bliss-mixer"
+version = "0.0.1"
+authors = ["Craig Drummond <craig.p.drummond@gmail.com>"]
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Mix songs using Bliss anlysis"
+repository = "https://github.com/CDrummond/bliss-mixer"
+keywords = ["audio", "song", "similarity"]
+readme = "README.md"
+
+[dependencies]
+argparse = "0.2.2"
+rusqlite = "0.25.0"
+log = "0.4.14"
+env_logger = "0.8.4"
+actix-web = "3"
+serde = { version = "1.0", features = ["derive"] }
+kiddo = "0.2.3"
+percent-encoding = "2.1.0"
+chrono = "0.4.19"
+rand = "0.8.4"
+regex = "1"
+substring = "1.4.5"
