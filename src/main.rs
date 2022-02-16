@@ -14,6 +14,8 @@ mod api;
 mod db;
 mod tree;
 
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let mut db_path = "bliss.db".to_string();
@@ -24,10 +26,12 @@ async fn main() -> std::io::Result<()> {
         let db_path_help = format!("Database location (default: {})", db_path);
         let port_help = format!("Port number (default: {})", port);
         let address_help = format!("Address to use (default: {})", address);
+        let description = format!("Bliss Mixer v{}", VERSION);
+
         // arg_parse.refer 'borrows' db_path, etc, and can only have one
         // borrow per scope, hence this section is enclosed in { }
         let mut arg_parse = ArgumentParser::new();
-        arg_parse.set_description("Bliss Mixer");
+        arg_parse.set_description(&description);
         arg_parse.refer(&mut db_path).add_option(&["-d", "--db"], Store, &db_path_help);
         arg_parse.refer(&mut port).add_option(&["-p", "--port"], Store, &port_help);
         arg_parse.refer(&mut address).add_option(&["-a", "--address"], Store, &address_help);
