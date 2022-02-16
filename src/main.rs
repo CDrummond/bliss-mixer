@@ -20,15 +20,17 @@ async fn main() -> std::io::Result<()> {
     let mut port:u16 = 12000;
     let mut address = "0.0.0.0".to_string();
     let mut logging = "warn".to_string();
-
     {
+        let db_path_help = format!("Database location (default: {})", db_path);
+        let port_help = format!("Port number (default: {})", port);
+        let address_help = format!("Address to use (default: {})", address);
         // arg_parse.refer 'borrows' db_path, etc, and can only have one
         // borrow per scope, hence this section is enclosed in { }
         let mut arg_parse = ArgumentParser::new();
         arg_parse.set_description("Bliss Mixer");
-        arg_parse.refer(&mut db_path).add_option(&["-d", "--db"], Store, "Database location");
-        arg_parse.refer(&mut port).add_option(&["-p", "--port"], Store, "Port number");
-        arg_parse.refer(&mut address).add_option(&["-a", "--address"], Store, "Address to use");
+        arg_parse.refer(&mut db_path).add_option(&["-d", "--db"], Store, &db_path_help);
+        arg_parse.refer(&mut port).add_option(&["-p", "--port"], Store, &port_help);
+        arg_parse.refer(&mut address).add_option(&["-a", "--address"], Store, &address_help);
         arg_parse.refer(&mut logging).add_option(&["-l", "--logging"], Store, "Log level (trace, debug, info, warn, error)");
         arg_parse.parse_args_or_exit();
     }
