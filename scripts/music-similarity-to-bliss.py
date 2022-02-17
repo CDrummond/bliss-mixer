@@ -12,6 +12,7 @@ def convert(mp, bp):
                    File varchar UNIQUE NOT NULL,
                    Title varchar,
                    Artist varchar,
+                   AlbumArtist varchar,
                    Album varchar,
                    Genre varchar,
                    Duration integer,
@@ -37,11 +38,11 @@ def convert(mp, bp):
                    Chroma9 real,
                    Chroma10 real)''')
     bc.execute('CREATE UNIQUE INDEX IF NOT EXISTS Tracks_idx ON Tracks(File)')
-    mc.execute('SELECT file, title, artist, album, genre, duration, ignore, bliss FROM tracks')
+    mc.execute('SELECT file, title, artist, albumartist, album, genre, duration, ignore, bliss FROM tracks')
     rows = mc.fetchall()
     for row in rows:
-        b = pickle.loads(row[7])
-        bc.execute('INSERT into Tracks (File, Title, Artist, Album, Genre, Duration, Ignore, Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (row[0], row[1], row[2], row[3], row[4], row[5], row[6], b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15], b[16], b[17], b[18], b[19]))
+        b = pickle.loads(row[8])
+        bc.execute('INSERT into Tracks (File, Title, Artist, AlbumArtist, Album, Genre, Duration, Ignore, Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15], b[16], b[17], b[18], b[19]))
 
     bliss.commit()
     bc.close()

@@ -48,6 +48,8 @@ pub const NON_ALPHANUMERIC: &AsciiSet = &CONTROLS
 
 const CHRISTMAS:&str = "Christmas";
 const CUE_TRACK:&str = ".CUE_TRACK.";
+const VARIOUS:&str = "various";
+const VARIOUS_ARTISTS:&str = "various artists";
 const MIN_COUNT:usize = 1;
 const MAX_COUNT:usize = 50;
 const MIN_NUM_SIM:usize = 5000;
@@ -76,10 +78,12 @@ struct Track {
     file: String,
     title: String,
     artist: String,
+    album_artist: String,
     album: String,
     genres: HashSet<String>,
     duration: u32,
-    sim: f32
+    sim: f32,
+    is_various: bool
 }
 
 #[derive(Clone)]
@@ -100,10 +104,12 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
         file: String::new(),
         title: String::new(),
         artist: String::new(),
+        album_artist: String::new(),
         album: String::new(),
         genres: HashSet::new(),
         duration: 0,
-        sim: 0.
+        sim: 0.,
+        is_various: false
     };
 
     match db.get_metadata(id) {
@@ -113,7 +119,13 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
             info.file = m.file;
             info.title = m.title.unwrap_or(String::new()).to_lowercase();
             info.artist = m.artist.unwrap_or(String::new()).to_lowercase();
-            info.album = m.album.unwrap_or(String::new()).to_lowercase() + "::" + &info.artist;
+            info.album_artist = m.album_artist.unwrap_or(String::new()).to_lowercase();
+            if info.album_artist.is_empty() {
+                info.album = m.album.unwrap_or(String::new()).to_lowercase() + "::" + &info.artist;
+            } else {
+                info.is_various = info.album_artist == VARIOUS || info.album_artist == VARIOUS_ARTISTS;
+                info.album = m.album.unwrap_or(String::new()).to_lowercase() + "::" + &info.album_artist;
+            }
             let genre = m.genre.unwrap_or(String::new());
             let genres:Vec<&str> = genre.split(";").collect();
             for g in genres {
@@ -136,10 +148,12 @@ fn get_track(db: &db::Db, track: &str, mpath: &str) -> Track {
         file: String::new(),
         title: String::new(),
         artist: String::new(),
+        album_artist: String::new(),
         album: String::new(),
         genres: HashSet::new(),
         duration: 0,
-        sim: 0.
+        sim: 0.,
+        is_various: false
     };
 
     let decoded = decode_path(&track, &mpath);
@@ -442,7 +456,7 @@ pub async fn similar(req: HttpRequest, payload: web::Json<SimParams>) -> impl Re
                             filtered.push(track_file);
                             continue;
                         }
-                        if norepalb>0 && filter_out_albums.contains(&trk.album) {
+                        if !trk.is_various && norepalb>0 && filter_out_albums.contains(&trk.album) {
                             log("FILTER(album)", &trk);
                             filtered.push(track_file);
                             continue;
