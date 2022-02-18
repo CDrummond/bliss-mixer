@@ -47,7 +47,6 @@ pub const NON_ALPHANUMERIC: &AsciiSet = &CONTROLS
     .add(b'}');
 
 const CHRISTMAS:&str = "Christmas";
-const CUE_TRACK:&str = ".CUE_TRACK.";
 const VARIOUS:&str = "various";
 const VARIOUS_ARTISTS:&str = "various artists";
 const MIN_COUNT:usize = 1;
@@ -241,23 +240,6 @@ fn decode_path(path: &str, mpath: &str) -> String {
         }
     }
 
-    match decoded.find("#") {
-        Some(idx) => {
-            if idx>0 {
-                let pos = decoded.substring(idx+1, decoded.len());
-                let parts:Vec<&str> = pos.split("-").collect();
-                if 2 == parts.len() {
-                    let start = parts[0].parse::<f32>();
-                    let end = parts[1].parse::<f32>();
-                    if start.is_ok() && end.is_ok() {
-                        decoded = decoded.replace("#", CUE_TRACK);
-                        decoded.push_str(".mp3");
-                    }
-                }
-            }
-        },
-        None => { }
-    }
     decoded
 }
 
@@ -265,23 +247,14 @@ fn encode_path(path: &str, mpath: &str) -> String {
     let mut full:String = String::from(mpath);
     full+=path;
 
-    if path.contains(CUE_TRACK) {
-        full = full.replace(CUE_TRACK, "#");
-        let parts: Vec<&str> = full.split("#").collect();
-        let mut new_full = String::from("file://") + &utf8_percent_encode(&parts[0], NON_ALPHANUMERIC).to_string();
-        new_full += "#";
-        new_full += parts[1];
-        full = new_full
+    let re = Regex::new(r"^/[A-Za-z]:").unwrap();
+    if re.is_match(&full) {
+        let astr = full.as_str();
+        // Check Windows path, if so don't encode first ':' (e.g. /c: )
+        // CHECK: Does first colon really matter???
+        full = String::from("file://") + astr.substring(0, 3) + &utf8_percent_encode(&astr.substring(3, full.len()), NON_ALPHANUMERIC).to_string();
     } else {
-        let re = Regex::new(r"^/[A-Za-z]:").unwrap();
-        if re.is_match(&full) {
-            let astr = full.as_str();
-            // Check Windows path, if so don't encode first ':' (e.g. /c: )
-            // CHECK: Does first colon really matter???
-            full = String::from("file://") + astr.substring(0, 3) + &utf8_percent_encode(&astr.substring(3, full.len()), NON_ALPHANUMERIC).to_string();
-        } else {
-            full = String::from("file://") + &utf8_percent_encode(&full.as_str(), NON_ALPHANUMERIC).to_string();
-        }
+        full = String::from("file://") + &utf8_percent_encode(&full.as_str(), NON_ALPHANUMERIC).to_string();
     }
     full
 }
