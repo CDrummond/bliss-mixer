@@ -306,13 +306,21 @@ pub async fn similar(req: HttpRequest, payload: web::Json<SimParams>) -> impl Re
     let genregroups = &payload.genregroups;
     let mpath = fix_mpath(&payload.mpath);
     let mut seeds:Vec<Track> = Vec::new();
+    // Tracks filtered out due to title matching seed or chosen track
     let mut filter_out_titles:HashSet<String> = HashSet::new();
+    // Tracks filtered out due to artist matching seed or chosen track
     let mut filter_out_artists:HashSet<String> = HashSet::new();
+    // Tracks filtered out due to album matching seed or chosen track
     let mut filter_out_albums:HashSet<String> = HashSet::new();
+    // IDs of seeds, previous, and chosen tracks - to prevent duplicates
     let mut filter_out_ids:HashSet<usize> = HashSet::new();
-    let mut seed_genres:HashSet<String> = HashSet::new();
+    // All acceptable genres
     let mut acceptable_genres:HashSet<String> = HashSet::new();
+    // All genres that are in a group, genres not in a group are in 'other genres'
     let mut all_genres_from_genregroups:HashSet<String> = HashSet::new();
+    // Albums from matching tracks. Don't want same album chosen twice, even if 
+    // norepalb is 0 or album is a VA album.
+    let mut chosen_albums:HashSet<String> = HashSet::new();
 
     if count < MIN_COUNT {
         count = MIN_COUNT;
@@ -364,8 +372,6 @@ pub async fn similar(req: HttpRequest, payload: web::Json<SimParams>) -> impl Re
         }
         let genres = get_genres(&genregroups, &trk.genres);
         acceptable_genres.extend(genres.clone());
-        seed_genres.extend(genres);
-        seed_genres.extend(trk.genres.clone());
         filter_out_ids.insert(trk.id);
         seeds.push(trk);
     }
@@ -432,6 +438,10 @@ pub async fn similar(req: HttpRequest, payload: web::Json<SimParams>) -> impl Re
                             log("DISCARD(christmas)", &trk);
                             continue;
                         }
+                        if chosen_albums.contains(&trk.album) {
+                            log("DISCARD(album)", &trk);
+                            continue;
+                        }
                         let track_file = TrackFile {
                             file:trk.file.clone(),
                             sim:trk.sim
@@ -474,6 +484,7 @@ pub async fn similar(req: HttpRequest, payload: web::Json<SimParams>) -> impl Re
                         if norepalb>0 {
                             filter_out_albums.insert(trk.album.clone());
                         }
+                        chosen_albums.insert(trk.album.clone());
                         id_to_pos.insert(trk.id, chosen.len());
                         chosen.push(track_file.clone());
 
