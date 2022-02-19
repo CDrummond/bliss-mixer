@@ -395,6 +395,7 @@ dependencies = [
  "regex",
  "rusqlite",
  "serde",
+ "serde_json",
  "substring",
 ]
 

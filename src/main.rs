@@ -6,7 +6,7 @@
  *
  **/
 
-use actix_web::{App, HttpServer, web};
+use actix_web::{App, HttpServer, client, web};
 use argparse::{ArgumentParser, Store};
 use std::path::Path;
 use std::process;
@@ -22,6 +22,7 @@ async fn main() -> std::io::Result<()> {
     let mut port:u16 = 12000;
     let mut address = "0.0.0.0".to_string();
     let mut logging = "warn".to_string();
+    let mut lms_server = String::new();
     {
         let db_path_help = format!("Database location (default: {})", db_path);
         let port_help = format!("Port number (default: {})", port);
@@ -36,6 +37,7 @@ async fn main() -> std::io::Result<()> {
         arg_parse.refer(&mut port).add_option(&["-p", "--port"], Store, &port_help);
         arg_parse.refer(&mut address).add_option(&["-a", "--address"], Store, &address_help);
         arg_parse.refer(&mut logging).add_option(&["-l", "--logging"], Store, "Log level (trace, debug, info, warn, error)");
+        arg_parse.refer(&mut lms_server).add_option(&["-L", "--lms"], Store, "LMS server (hostname or IP address)");
         arg_parse.parse_args_or_exit();
     }
 
@@ -67,14 +69,39 @@ async fn main() -> std::io::Result<()> {
     let db = db::Db::new(&db_path);
     db.load_tree(&mut tree);
     db.close();
-        
-    HttpServer::new(move|| {
+
+    if !lms_server.is_empty() {
+        address = "127.0.0.1".to_string();
+        port = 0;
+    }
+
+    let server = HttpServer::new(move|| {
         App::new()
             .data(tree.clone())
             .data(db_path.clone())
             .route("/api/similar", web::post().to(api::similar))
-    })
-    .bind((address, port))?
+    }).bind((address, port))?;
+
+    if !lms_server.is_empty() {
+        // Inform LMS of port number in use
+        let client = client::Client::default();
+
+        let request = serde_json::json!({
+            "id": 1,
+            "method": "slim.request",
+            "params":[
+                "",
+                ["blissmixer", "port", format!("number:{}", server.addrs()[0].port())]
+            ]
+        });
+
+        match client.post(format!("http://{}:9000/jsonrpc.js", lms_server)).send_json(&request).await {
+            Ok(_) => { log::debug!("LMS updated"); }
+            Err(e) => { log::error!("Failed to update LMS. {}", e); process::exit(-1); }
+        }
+    }
+
+    server
     .run()
     .await
 }
