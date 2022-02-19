@@ -343,10 +343,19 @@ pub async fn similar(req: HttpRequest, payload: web::Json<SimParams>) -> impl Re
         if !trk.found {
             continue;
         }
-        let genres = get_genres(&genregroups, &trk.genres);
-        acceptable_genres.extend(genres.clone());
+        if filtergenre == 1 {
+            let genres = get_genres(&genregroups, &trk.genres);
+            acceptable_genres.extend(genres.clone());
+        }
         filter_out_ids.insert(trk.id);
         seeds.push(trk);
+    }
+
+    log::debug!("filtergenre:{}, filterxmas:{}, min:{}, max:{}, shuffle:{}, norepart:{}, norepalb:{}",
+                filtergenre, filterxmas, min, max, shuffle, norepart, norepalb);
+
+    if filtergenre == 1 {
+        log::debug!("Acceptable genres: {:?}", acceptable_genres);
     }
 
     // List of tracks that have passed filtering
