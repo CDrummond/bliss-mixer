@@ -43,7 +43,7 @@ async fn main() -> std::io::Result<()> {
     let mut db_path = "bliss.db".to_string();
     let mut port:u16 = 12000;
     let mut address = "0.0.0.0".to_string();
-    let mut logging = "debug".to_string();
+    let mut logging = "warn".to_string();
     let mut lms_server = String::new();
     let mut allow_db_upload = false;
     {
