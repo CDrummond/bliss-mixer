@@ -7,22 +7,45 @@
  **/
 
 use actix_web::{App, HttpServer, client, web};
-use argparse::{ArgumentParser, Store};
+use argparse::{ArgumentParser, Store, StoreTrue};
 use std::path::Path;
 use std::process;
 mod api;
 mod db;
 mod tree;
+mod upload;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
+async fn send_port_to_lms(lms_server:&String, port:u16) {
+    if !lms_server.is_empty() {
+        // Inform LMS of port number in use
+        let client = client::Client::default();
+
+        let request = serde_json::json!({
+            "id": 1,
+            "method": "slim.request",
+            "params":[
+                "",
+                ["blissmixer", "port", format!("number:{}", port)]
+            ]
+        });
+
+        match client.post(format!("http://{}:9000/jsonrpc.js", lms_server)).send_json(&request).await {
+            Ok(_) => { log::debug!("LMS updated"); }
+            Err(e) => { log::error!("Failed to update LMS. {}", e); process::exit(-1); }
+        }
+    }
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let mut db_path = "bliss.db".to_string();
     let mut port:u16 = 12000;
     let mut address = "0.0.0.0".to_string();
-    let mut logging = "warn".to_string();
+    let mut logging = "debug".to_string();
     let mut lms_server = String::new();
+    let mut allow_db_upload = false;
     {
         let db_path_help = format!("Database location (default: {})", db_path);
         let port_help = format!("Port number (default: {})", port);
@@ -38,6 +61,7 @@ async fn main() -> std::io::Result<()> {
         arg_parse.refer(&mut address).add_option(&["-a", "--address"], Store, &address_help);
         arg_parse.refer(&mut logging).add_option(&["-l", "--logging"], Store, "Log level (trace, debug, info, warn, error)");
         arg_parse.refer(&mut lms_server).add_option(&["-L", "--lms"], Store, "LMS server (hostname or IP address)");
+        arg_parse.refer(&mut allow_db_upload).add_option(&["-u", "--upload"], StoreTrue, "Allow uploading of database");
         arg_parse.parse_args_or_exit();
     }
 
@@ -55,53 +79,56 @@ async fn main() -> std::io::Result<()> {
     }
 
     let path = Path::new(&db_path);
-    if !path.exists() {
-        log::error!("DB path ({}) does not exist", db_path);
-        process::exit(-1);
-    }
+    if !allow_db_upload {
+        // DB upload not allowd, so database file *must* exist
+        if !path.exists() {
+            log::error!("DB path ({}) does not exist", db_path);
+            process::exit(-1);
+        }
 
-    if !path.is_file() {
-        log::error!("DB path ({}) is not a file", db_path);
-        process::exit(-1);
+        if !path.is_file() {
+            log::error!("DB path ({}) is not a file", db_path);
+            process::exit(-1);
+        }
     }
 
     let mut tree = tree::Tree::new();
-    let db = db::Db::new(&db_path);
-    db.load_tree(&mut tree);
-    db.close();
+    if path.exists() {
+        let db = db::Db::new(&db_path);
+        db.load_tree(&mut tree);
+        db.close();
+    }
 
     if !lms_server.is_empty() {
         address = "127.0.0.1".to_string();
         port = 0;
     }
 
-    let server = HttpServer::new(move|| {
-        App::new()
-            .data(tree.clone())
-            .data(db_path.clone())
-            .route("/api/similar", web::post().to(api::similar))
-    }).bind((address, port))?;
+    if allow_db_upload {
+        let server = HttpServer::new(move|| {
+            App::new()
+                .data(tree.clone())
+                .data(db_path.clone())
+                .app_data(web::PayloadConfig::new(200 * 1024 * 1024))
+                .route("/api/similar", web::post().to(api::similar))
+                .route("/upload", web::put().to(upload::handle_upload))
+        }).bind((address, port))?;
+        send_port_to_lms(&lms_server, server.addrs()[0].port()).await;
 
-    if !lms_server.is_empty() {
-        // Inform LMS of port number in use
-        let client = client::Client::default();
+        server
+        .run()
+        .await
+    } else {
+        let server = HttpServer::new(move|| {
+            App::new()
+                .data(tree.clone())
+                .data(db_path.clone())
+                .route("/api/similar", web::post().to(api::similar))
+        }).bind((address, port))?;
+        send_port_to_lms(&lms_server, server.addrs()[0].port()).await;
 
-        let request = serde_json::json!({
-            "id": 1,
-            "method": "slim.request",
-            "params":[
-                "",
-                ["blissmixer", "port", format!("number:{}", server.addrs()[0].port())]
-            ]
-        });
-
-        match client.post(format!("http://{}:9000/jsonrpc.js", lms_server)).send_json(&request).await {
-            Ok(_) => { log::debug!("LMS updated"); }
-            Err(e) => { log::error!("Failed to update LMS. {}", e); process::exit(-1); }
-        }
+        server
+        .run()
+        .await
     }
-
-    server
-    .run()
-    .await
 }
