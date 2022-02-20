@@ -50,7 +50,7 @@ pub async fn handle_upload(req: HttpRequest, body: web::Bytes) -> impl Responder
         if orig_path.exists() {
             match fs::remove_file(orig_path) {
                 Ok(_) => { },
-                Err(_) => { }
+                Err(e) => { log::error!("Failed to remove {}. {}", orig_path.to_string_lossy(), e); }
             }
         }
 
@@ -66,7 +66,7 @@ pub async fn handle_upload(req: HttpRequest, body: web::Bytes) -> impl Responder
         if up_path.exists() {
             match fs::remove_file(up_path) {
                 Ok(_) => { },
-                Err(_) => { }
+                Err(e) => { log::error!("Failed to remove {}. {}", up_path.to_string_lossy(), e); }
             }
         }
     }
