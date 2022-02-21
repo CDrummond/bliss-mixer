@@ -1,3 +1,4 @@
+cargo-features = ["edition2021"]
 [package]
 name = "bliss-mixer"
 version = "0.0.1"
