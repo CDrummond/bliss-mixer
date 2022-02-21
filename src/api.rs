@@ -264,7 +264,7 @@ fn log(reason: &str, trk: &Track) {
                 reason, trk.file, trk.title, trk.album, trk.duration, trk.sim, trk.genres);
 }
 
-pub async fn similar(req: HttpRequest, payload: web::Json<SimParams>) -> impl Responder {
+pub async fn mix(req: HttpRequest, payload: web::Json<SimParams>) -> impl Responder {
     let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
     let db_path = req.app_data::<web::Data<String>>().unwrap();
     let db = db::Db::new(&db_path);
@@ -291,7 +291,7 @@ pub async fn similar(req: HttpRequest, payload: web::Json<SimParams>) -> impl Re
     let mut acceptable_genres:HashSet<String> = HashSet::new();
     // All genres that are in a group, genres not in a group are in 'other genres'
     let mut all_genres_from_genregroups:HashSet<String> = HashSet::new();
-    // Albums from matching tracks. Don't want same album chosen twice, even if 
+    // Albums from matching tracks. Don't want same album chosen twice, even if
     // norepalb is 0 or album is a VA album.
     let mut chosen_albums:HashSet<String> = HashSet::new();
 

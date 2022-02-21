@@ -70,7 +70,7 @@ async fn main() -> std::io::Result<()> {
     } else {
         env_logger::init_from_env(env_logger::Env::default().filter_or("XXXXXXXX", "ERROR"));
         log::error!("Invalid log level ({}) supplied", logging);
-        process::exit(-1); 
+        process::exit(-1);
     }
 
     if db_path.len()<3 {
@@ -110,7 +110,7 @@ async fn main() -> std::io::Result<()> {
                 .data(tree.clone())
                 .data(db_path.clone())
                 .app_data(web::PayloadConfig::new(200 * 1024 * 1024))
-                .route("/api/similar", web::post().to(api::similar))
+                .route("/api/mix", web::post().to(api::mix))
                 .route("/upload", web::put().to(upload::handle_upload))
         }).bind((address, port))?;
         send_port_to_lms(&lms_server, server.addrs()[0].port()).await;
@@ -123,7 +123,7 @@ async fn main() -> std::io::Result<()> {
             App::new()
                 .data(tree.clone())
                 .data(db_path.clone())
-                .route("/api/similar", web::post().to(api::similar))
+                .route("/api/mix", web::post().to(api::mix))
         }).bind((address, port))?;
         send_port_to_lms(&lms_server, server.addrs()[0].port()).await;
 
