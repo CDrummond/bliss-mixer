@@ -7,6 +7,7 @@
  **/
 
 use actix_web::{HttpRequest, Responder, web};
+use rusqlite::{Connection};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -44,22 +45,39 @@ pub async fn handle_upload(req: HttpRequest, body: web::Bytes) -> impl Responder
         }
     }
 
-    // Rename DB.tmp to DB
+    // Rename DB.tmp to DB - but only if its a valid SQLite database
     if total_written>0 && up_path.exists() {
-        // Remove original DB
-        if orig_path.exists() {
-            match fs::remove_file(orig_path) {
-                Ok(_) => { },
-                Err(e) => { log::error!("Failed to remove {}. {}", orig_path.to_string_lossy(), e); }
-            }
-        }
+        // Ensure file is a valid SQLite database
+        match Connection::open(up_path) {
+            Ok(conn) => {
+                // now close, so that file can be renamed
+                match conn.close() {
+                    Ok(_) => {
+                        // Remove original DB
+                        if orig_path.exists() {
+                            match fs::remove_file(orig_path) {
+                                Ok(_) => { },
+                                Err(e) => { log::error!("Failed to remove {}. {}", orig_path.to_string_lossy(), e); }
+                            }
+                        }
 
-        // Now do actual rename
-        if !orig_path.exists() {
-            match fs::rename(up_path, orig_path) {
-                Ok(_) => { },
-                Err(_) => { log::error!("Failed to rename {} to {}", up_path.to_string_lossy(), orig_path.to_string_lossy()); }
+                        // Now do actual rename
+                        if !orig_path.exists() {
+                            match fs::rename(up_path, orig_path) {
+                                Ok(_) => { },
+                                Err(e) => { log::error!("Failed to rename {} to {}. {}", up_path.to_string_lossy(), orig_path.to_string_lossy(), e); }
+                            }
+                        }
+                    },
+                    Err(_) => {
+                        log::error!("Failed to close {}.", up_path.to_string_lossy());
+                    }
+                }
+            },
+            Err(e) => {
+                log::error!("Failed to open {}. {}", up_path.to_string_lossy(), e);
             }
+
         }
 
         // To be safe, remove temp if it still exists
