@@ -1,8 +1,6 @@
 name: Build for all platforms
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 env:
