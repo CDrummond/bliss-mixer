@@ -5,7 +5,7 @@ set -eux
 uname -a
 DESTDIR=/src/releases
 
-for d in armhf-linux arm-linux i386-linux x86_64-linux ; do
+for d in armhf-linux arm-linux x86_64-linux ; do
     mkdir -p $DESTDIR/$d
     rm -f $DESTDIR/$d/*
 done
@@ -23,4 +23,4 @@ function build {
 build arm-unknown-linux-gnueabihf arm-linux-gnueabihf-strip armhf-linux/bliss-mixer
 build aarch64-unknown-linux-gnu aarch64-linux-gnu-strip arm-linux/bliss-mixer
 build x86_64-unknown-linux-musl strip x86_64-linux/bliss-mixer
-build i686-unknown-linux-musl strip i386-linux/bliss-mixer
+
