@@ -61,6 +61,10 @@ jobs:
           -arch arm64 releases/bliss-mixer-arm64 \
           -output releases/bliss-mixer
 
+    - name: Remove ununsed binaries
+      run:
+        rm releases/bliss-mixer-x86_64 releases/bliss-mixer-arm64
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
