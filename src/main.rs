@@ -93,7 +93,6 @@ async fn main() -> std::io::Result<()> {
     }
 
     if !lms_server.is_empty() {
-        address = "127.0.0.1".to_string();
         port = 0;
     }
 
