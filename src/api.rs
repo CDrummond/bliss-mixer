@@ -56,7 +56,7 @@ const MAX_ARTIST_TRACKS:usize = 5;
 const MAX_ARTIST_TRACK_SIM_DIFF:f32 = 0.1;
 
 #[derive(Deserialize)]
-pub struct SimParams {
+pub struct MixParams {
     count: Option<u16>,
     filtergenre: Option<u16>,
     filterxmas: Option<u16>,
@@ -264,7 +264,7 @@ fn log(reason: &str, trk: &Track) {
                 reason, trk.file, trk.title, trk.album, trk.duration, trk.sim, trk.genres);
 }
 
-pub async fn mix(req: HttpRequest, payload: web::Json<SimParams>) -> impl Responder {
+pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Responder {
     let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
     let db_path = req.app_data::<web::Data<String>>().unwrap();
     let db = db::Db::new(&db_path);
