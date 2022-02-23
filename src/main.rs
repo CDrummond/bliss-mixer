@@ -92,25 +92,17 @@ async fn main() -> std::io::Result<()> {
         }
     }
 
-    let mut tree = tree::Tree::new();
-    if path.exists() {
-        let db = db::Db::new(&db_path);
-        db.load_tree(&mut tree);
-        db.close();
-    }
-
     if !lms_server.is_empty() {
         address = "127.0.0.1".to_string();
         port = 0;
     }
 
     if allow_db_upload {
+        log::info!("Starting in upload mode");
         let server = HttpServer::new(move|| {
             App::new()
-                .data(tree.clone())
                 .data(db_path.clone())
                 .app_data(web::PayloadConfig::new(200 * 1024 * 1024))
-                .route("/api/mix", web::post().to(api::mix))
                 .route("/upload", web::put().to(upload::handle_upload))
         }).bind((address, port))?;
         send_port_to_lms(&lms_server, server.addrs()[0].port()).await;
@@ -119,6 +111,14 @@ async fn main() -> std::io::Result<()> {
         .run()
         .await
     } else {
+        log::info!("Starting in mix mode");
+        let mut tree = tree::Tree::new();
+        if path.exists() {
+            let db = db::Db::new(&db_path);
+            db.load_tree(&mut tree);
+            db.close();
+        }
+
         let server = HttpServer::new(move|| {
             App::new()
                 .data(tree.clone())

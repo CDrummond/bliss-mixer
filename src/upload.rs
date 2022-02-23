@@ -29,11 +29,13 @@ pub async fn handle_upload(req: HttpRequest, body: web::Bytes) -> impl Responder
         }
     }
 
+    log::info!("Handling upload");
     match fs::File::create(up_path) {
         Ok(mut file) => {
             let mut iter = body.chunks(CHUNK_SIZE);
             while let Some(chunk) = iter.next() {
                 let a = chunk;
+                log::info!("Received chunk of {} byte(s)", a.len());
                 match file.write(a) {
                     Ok(count) => { total_written+=count; },
                     Err(_) => { }
@@ -45,6 +47,7 @@ pub async fn handle_upload(req: HttpRequest, body: web::Bytes) -> impl Responder
         }
     }
 
+    log::debug!("Total size: {}", total_written);
     // Rename DB.tmp to DB - but only if its a valid SQLite database
     if total_written>0 && up_path.exists() {
         // Ensure file is a valid SQLite database
