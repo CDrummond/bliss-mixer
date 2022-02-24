@@ -53,7 +53,8 @@ const MIN_COUNT:usize = 1;
 const MAX_COUNT:usize = 50;
 const MIN_NUM_SIM:usize = 5000;
 const MAX_ARTIST_TRACKS:usize = 5;
-const MAX_ARTIST_TRACK_SIM_DIFF:f32 = 0.1;
+// KDTree is returning squared-euc distance. So max diff = sqr(0.1) = 0.01
+const MAX_ARTIST_TRACK_SIM_DIFF:f32 = 0.01;
 
 #[derive(Deserialize)]
 pub struct MixParams {
