@@ -504,7 +504,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     if shuffle==1 {
         // For each artist that had multiple similar tracks, choose one at random
         for (name, info) in matched_artists {
-            if !info.tracks.is_empty() {
+            if info.tracks.len()>1 {
                 log::debug!("Choosing random track for {} ({} tracks)", name, info.tracks.len());
                 match info.tracks.choose(&mut thread_rng()) {
                     Some(trk) => { chosen[info.pos].file = trk.file.clone(); },
