@@ -515,14 +515,14 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 
     // Too few tracks? Choose some from filtered...
     if chosen.len()<min_count && !filtered.is_empty() {
-        filtered.sort_by(|a, b| b.sim.partial_cmp(&a.sim).unwrap());
+        filtered.sort_by(|a, b| a.sim.partial_cmp(&b.sim).unwrap());
         while chosen.len()<min_count && !filtered.is_empty() {
             chosen.push(filtered.remove(0));
         }
     }
 
     // Sort by similarity
-    chosen.sort_by(|a, b| b.sim.partial_cmp(&a.sim).unwrap());
+    chosen.sort_by(|a, b| a.sim.partial_cmp(&b.sim).unwrap());
 
     if shuffle==1 {
         // Take top 'similarity_count' tracks
