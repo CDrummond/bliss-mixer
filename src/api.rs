@@ -135,7 +135,7 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
             }
             info.duration = m.duration.unwrap_or(0);
         },
-        Err(_) => { }
+        Err(e) => { log::error!("Failed to read metadata. {}", e); }
     }
     info
 }
@@ -156,14 +156,14 @@ fn get_track(db: &db::Db, track: &str, mpath: &str) -> Track {
     };
 
     let decoded = decode_path(&track, &mpath);
-    match &db.get_rowid(&decoded) {
-        Ok(id) => {
-            info = get_track_from_id(db, *id);
-        },
-        Err(_) => { log::error!("Track ({}) not found in DB", decoded); }
-    }
-    if !info.found {
-        log::warn!("Could not find '{}' in DB", decoded);
+    let id = db.get_rowid(&decoded);
+    if id>0 {
+        info = get_track_from_id(db, id);
+        if !info.found {
+            log::warn!("Could not find '{}' in DB", decoded);
+        }
+    } else {
+        log::error!("Track '{}' not found in DB", decoded);
     }
     info
 }

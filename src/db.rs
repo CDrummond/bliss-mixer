@@ -104,12 +104,20 @@ impl Db {
         }
     }
 
-    pub fn get_rowid(&self, path: &String) -> Result<usize, rusqlite::Error> {
-        let mut stmt = self.conn.prepare("SELECT rowid FROM Tracks WHERE File=:path;")?;
-        let row = stmt.query_row(&[(":path", &path)], |row| {
-            Ok(row.get(0)?)
-        }).unwrap();
-        Ok(row)
+    pub fn get_rowid(&self, path: &String) -> usize {
+        let mut id:usize = 0;
+        match self.conn.prepare("SELECT rowid FROM Tracks WHERE File=:path;") {
+            Ok(mut stmt) => {
+                match stmt.query_row(&[(":path", &path)], |row| {
+                    Ok(row.get(0)?)
+                }) {
+                    Ok(val) => { id = val; },
+                    Err(_) => { }
+                }
+            },
+            Err(_) => {}
+        }
+        id
     }
 
     pub fn get_metadata(&self, id: usize) -> Result<Metadata, rusqlite::Error> {
