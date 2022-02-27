@@ -89,6 +89,8 @@ struct Track {
     id: usize,
     file: String,
     title: String,
+    // Original artist, so that can use for api/lisr
+    orig_artist: String,
     artist: String,
     album_artist: String,
     album: String,
@@ -116,6 +118,7 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
         file: String::new(),
         title: String::new(),
         artist: String::new(),
+        orig_artist: String::new(),
         album_artist: String::new(),
         album: String::new(),
         genres: HashSet::new(),
@@ -130,7 +133,8 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
             info.found = true;
             info.file = m.file;
             info.title = m.title.unwrap_or(String::new()).to_lowercase();
-            info.artist = m.artist.unwrap_or(String::new()).to_lowercase();
+            info.orig_artist = m.artist.unwrap_or(String::new());
+            info.artist = info.orig_artist.to_lowercase();
             info.album_artist = m.album_artist.unwrap_or(String::new()).to_lowercase();
             if info.album_artist.is_empty() {
                 info.album = m.album.unwrap_or(String::new()).to_lowercase() + "::" + &info.artist;
@@ -160,6 +164,7 @@ fn get_track(db: &db::Db, track: &str, mpath: &str) -> Track {
         file: String::new(),
         title: String::new(),
         artist: String::new(),
+        orig_artist: String::new(),
         album_artist: String::new(),
         album: String::new(),
         genres: HashSet::new(),
@@ -559,7 +564,6 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 }
 
 pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Responder {
-    let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
     let db_path = req.app_data::<web::Data<String>>().unwrap();
     let db = db::Db::new(&db_path);
     let mut count = payload.count.unwrap_or(5) as usize;
@@ -597,8 +601,16 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
         filter_out_titles.insert(seed.title);
         match db.get_metrics(seed.id) {
             Ok(metrics) => {
-                log::debug!("METRCIS:{:?}", metrics);
-                let sim_tracks:Vec<tree::Sim> = tree.get_similars(&metrics, MIN_NUM_SIM);
+                let mut sim_tracks:Vec<tree::Sim> = Vec::new();
+
+                if byartist==1 {
+                    let mut tree = tree::Tree::new();
+                    db.load_artist_tree(&mut tree, &seed.orig_artist);
+                    sim_tracks.extend(tree.get_similars(&metrics, MIN_NUM_SIM));
+                } else {
+                    let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
+                    sim_tracks.extend(tree.get_similars(&metrics, MIN_NUM_SIM));
+                }
 
                 for sim_track in sim_tracks {
                     let mut trk:Track = get_track_from_id(&db, sim_track.id);
@@ -613,10 +625,6 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
                     }
                     if filtergenre==1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_genregroups) {
                         log("DISCARD(genre)", &trk);
-                        continue;
-                    }
-                    if byartist==1 && trk.artist!=seed.artist {
-                        log("DISCARD(artist)", &trk);
                         continue;
                     }
                     chosen.push(trk.file);
