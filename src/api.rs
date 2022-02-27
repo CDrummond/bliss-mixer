@@ -75,9 +75,11 @@ pub struct MixParams {
 #[derive(Deserialize)]
 pub struct ListParams {
     count: Option<u16>,
+    filtergenre: Option<u16>,
     min: Option<u32>,
     max: Option<u32>,
     track: String,
+    genregroups: Vec<Vec<String>>,
     mpath: String,
     byartist: u16
 }
@@ -359,6 +361,9 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
             acceptable_genres.extend(genres.clone());
         }
         filter_out_ids.insert(trk.id);
+        if !trk.title.is_empty() {
+            filter_out_titles.insert(trk.title.clone());
+        }
         seeds.push(trk);
     }
 
@@ -554,15 +559,21 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 }
 
 pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Responder {
+    let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
     let db_path = req.app_data::<web::Data<String>>().unwrap();
     let db = db::Db::new(&db_path);
     let mut count = payload.count.unwrap_or(5) as usize;
+    let filtergenre = payload.filtergenre.unwrap_or(0);
     let min = payload.min.unwrap_or(0);
     let max = payload.max.unwrap_or(0);
     let mpath = fix_mpath(&payload.mpath);
-    let seed = &payload.track;
+    let track = &payload.track;
     let byartist = payload.byartist;
+    let genregroups = &payload.genregroups;
+    let mut acceptable_genres:HashSet<String> = HashSet::new();
+    let mut all_genres_from_genregroups:HashSet<String> = HashSet::new();
     let mut chosen:Vec<String> = Vec::new();
+    let mut filter_out_titles:HashSet<String> = HashSet::new();
 
     if count < MIN_COUNT {
         count = MIN_COUNT;
@@ -570,27 +581,49 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
         count = MAX_COUNT;
     }
 
-    let trk:Track = get_track(&db, &seed, &mpath);
-    if trk.found {
-        match db.get_metrics(trk.id) {
-            Ok(metrics) => {
-                let mut sim_tracks:Vec<tree::Sim> = Vec::new();
-                if byartist == 1 {
-                    let mut tree = tree::Tree::new();
-                    db.load_artist_tree(&mut tree, &trk.artist);
-                    sim_tracks.extend(tree.get_similars(&metrics, count*50));
-                } else {
-                    let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
-                    sim_tracks.extend(tree.get_similars(&metrics, count*50));
+    let seed:Track = get_track(&db, &track, &mpath);
+    if seed.found {
+        if filtergenre==1 {
+            for group in genregroups {
+                for genre in group {
+                    all_genres_from_genregroups.insert(genre.to_string());
                 }
+            }
+            if !seed.genres.is_empty() {
+                let genres = get_genres(&genregroups, &seed.genres);
+                acceptable_genres.extend(genres);
+            }
+        }
+        filter_out_titles.insert(seed.title);
+        match db.get_metrics(seed.id) {
+            Ok(metrics) => {
+                log::debug!("METRCIS:{:?}", metrics);
+                let sim_tracks:Vec<tree::Sim> = tree.get_similars(&metrics, MIN_NUM_SIM);
+
                 for sim_track in sim_tracks {
-                    let trk:Track = get_track_from_id(&db, sim_track.id);
-                    if trk.duration>=min && trk.duration<=max {
-                        chosen.push(trk.file);
-                        if chosen.len()>=count {
-                            break;
-                        }
+                    let mut trk:Track = get_track_from_id(&db, sim_track.id);
+                    trk.sim = sim_track.sim;
+                    if (min>0 && trk.duration<min) || (max>0 && trk.duration>max) {
+                        log("DISCARD(duration)", &trk);
+                        continue;
                     }
+                    if filter_out_titles.contains(&trk.title) {
+                        log("FILTER(title)", &trk);
+                        continue;
+                    }
+                    if filtergenre==1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_genregroups) {
+                        log("DISCARD(genre)", &trk);
+                        continue;
+                    }
+                    if byartist==1 && trk.artist!=seed.artist {
+                        log("DISCARD(artist)", &trk);
+                        continue;
+                    }
+                    chosen.push(trk.file);
+                    if chosen.len()>=count {
+                        break;
+                    }
+                    filter_out_titles.insert(trk.title);
                 }
             },
             Err(_) => { }
