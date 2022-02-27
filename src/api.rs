@@ -79,7 +79,7 @@ pub struct ListParams {
     max: Option<u32>,
     track: String,
     mpath: String,
-    byartist: bool
+    byartist: u16
 }
 
 struct Track {
@@ -575,7 +575,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
         match db.get_metrics(trk.id) {
             Ok(metrics) => {
                 let mut sim_tracks:Vec<tree::Sim> = Vec::new();
-                if byartist {
+                if byartist == 1 {
                     let mut tree = tree::Tree::new();
                     db.load_artist_tree(&mut tree, &trk.artist);
                     sim_tracks.extend(tree.get_similars(&metrics, count*50));
