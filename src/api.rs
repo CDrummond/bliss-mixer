@@ -72,6 +72,16 @@ pub struct MixParams {
     mpath: String,
 }
 
+#[derive(Deserialize)]
+pub struct ListParams {
+    count: Option<u16>,
+    min: Option<u32>,
+    max: Option<u32>,
+    track: String,
+    mpath: String,
+    byartist: bool
+}
+
 struct Track {
     found: bool,
     id: usize,
@@ -538,6 +548,58 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     let mut resp = String::new();
     for track in chosen {
         resp += &(encode_path(&track.file, &mpath).to_string());
+        resp += "\n";
+    }
+    resp
+}
+
+pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Responder {
+    let db_path = req.app_data::<web::Data<String>>().unwrap();
+    let db = db::Db::new(&db_path);
+    let mut count = payload.count.unwrap_or(5) as usize;
+    let min = payload.min.unwrap_or(0);
+    let max = payload.max.unwrap_or(0);
+    let mpath = fix_mpath(&payload.mpath);
+    let seed = &payload.track;
+    let byartist = payload.byartist;
+    let mut chosen:Vec<String> = Vec::new();
+
+    if count < MIN_COUNT {
+        count = MIN_COUNT;
+    } else if count > MAX_COUNT {
+        count = MAX_COUNT;
+    }
+
+    let trk:Track = get_track(&db, &seed, &mpath);
+    if trk.found {
+        match db.get_metrics(trk.id) {
+            Ok(metrics) => {
+                let mut sim_tracks:Vec<tree::Sim> = Vec::new();
+                if byartist {
+                    let mut tree = tree::Tree::new();
+                    db.load_artist_tree(&mut tree, &trk.artist);
+                    sim_tracks.extend(tree.get_similars(&metrics, count*50));
+                } else {
+                    let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
+                    sim_tracks.extend(tree.get_similars(&metrics, count*50));
+                }
+                for sim_track in sim_tracks {
+                    let trk:Track = get_track_from_id(&db, sim_track.id);
+                    if trk.duration>=min && trk.duration<=max {
+                        chosen.push(trk.file);
+                        if chosen.len()>=count {
+                            break;
+                        }
+                    }
+                }
+            },
+            Err(_) => { }
+        }
+    }
+
+    let mut resp = String::new();
+    for track in chosen {
+        resp += &(encode_path(&track, &mpath).to_string());
         resp += "\n";
     }
     resp
