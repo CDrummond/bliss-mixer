@@ -8,43 +8,12 @@
 
 use actix_web::{HttpRequest, Responder, web};
 use chrono::Datelike;
-use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS};
 use rand::thread_rng;
 use rand::seq::SliceRandom;
-use regex::Regex;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
-use substring::Substring;
 use crate::db;
 use crate::tree;
-
-// Adjusted from percent_encoding.NON_ALPHANUMERIC to match LMS
-pub const NON_ALPHANUMERIC: &AsciiSet = &CONTROLS
-    .add(b' ')
-    .add(b'"')
-    .add(b'#')
-    .add(b'$')
-    .add(b'%')
-    .add(b'&')
-    .add(b'*')
-    .add(b'+')
-    .add(b',')
-    .add(b':')
-    .add(b';')
-    .add(b'<')
-    .add(b'=')
-    .add(b'>')
-    .add(b'?')
-    .add(b'@')
-    .add(b'[')
-    .add(b'\\')
-    .add(b']')
-    .add(b'^')
-    .add(b'_')
-    .add(b'`')
-    .add(b'{')
-    .add(b'|')
-    .add(b'}');
 
 const CHRISTMAS:&str = "Christmas";
 const VARIOUS:&str = "various";
@@ -68,8 +37,7 @@ pub struct MixParams {
     shuffle: Option<u16>,
     norepart: Option<u16>,
     norepalb: Option<u16>,
-    genregroups: Vec<Vec<String>>,
-    mpath: String,
+    genregroups: Vec<Vec<String>>
 }
 
 #[derive(Deserialize)]
@@ -80,7 +48,6 @@ pub struct ListParams {
     max: Option<u32>,
     track: String,
     genregroups: Vec<Vec<String>>,
-    mpath: String,
     byartist: u16
 }
 
@@ -89,7 +56,7 @@ struct Track {
     id: usize,
     file: String,
     title: String,
-    // Original artist, so that can use for api/lisr
+    // Original artist, so that can use for api/list
     orig_artist: String,
     artist: String,
     album_artist: String,
@@ -157,7 +124,7 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
     info
 }
 
-fn get_track(db: &db::Db, track: &str, mpath: &str) -> Track {
+fn get_track(db: &db::Db, track: &str) -> Track {
     let mut info = Track {
         found: false,
         id:0,
@@ -173,15 +140,14 @@ fn get_track(db: &db::Db, track: &str, mpath: &str) -> Track {
         is_various: false
     };
 
-    let decoded = decode_path(&track, &mpath);
-    let id = db.get_rowid(&decoded);
+    let id = db.get_rowid(&track);
     if id>0 {
         info = get_track_from_id(db, id);
         if !info.found {
-            log::warn!("Could not find '{}' in DB", decoded);
+            log::warn!("Could not find '{}' in DB", track);
         }
     } else {
-        log::error!("Track '{}' not found in DB", decoded);
+        log::error!("Track '{}' not found in DB", track);
     }
     info
 }
@@ -223,60 +189,6 @@ fn filter_genre(track_genres: &HashSet<String>, acceptable_genres: &HashSet<Stri
     rv
 }
 
-fn fix_mpath(mpath: &str) -> String {
-    let mut path = String::from(mpath);
-
-    let re = Regex::new(r"^[A-Za-z]:\\").unwrap();
-    if re.is_match(&path) {
-        // LMS will supply (e.g.) c:\Users\user\Music and we want /C:/Users/user/Music/
-        // This is because tracks will be file:///C:/Users/user/Music
-        path = String::from("/") + &path.replace("\\", "/");
-    }
-
-    if !path.ends_with("/") {
-        path += "/";
-    }
-    path
-}
-
-fn decode_path(path: &str, mpath: &str) -> String {
-    let mut decoded:String = String::from(percent_decode_str(&path).decode_utf8().unwrap());
-    match decoded.strip_prefix("file://") {
-        Some(s) => { decoded = String::from(s); },
-        None => { }
-    }
-
-    match decoded.strip_prefix("tmp://") {
-        Some(s) => { decoded = String::from(s); },
-        None => { }
-    }
-
-    if !mpath.is_empty() {
-        match decoded.strip_prefix(mpath) {
-            Some(s) => { decoded = String::from(s); },
-            None => { }
-        }
-    }
-
-    decoded
-}
-
-fn encode_path(path: &str, mpath: &str) -> String {
-    let mut full:String = String::from(mpath);
-    full+=path;
-
-    let re = Regex::new(r"^/[A-Za-z]:").unwrap();
-    if re.is_match(&full) {
-        let astr = full.as_str();
-        // Check Windows path, if so don't encode first ':' (e.g. /c: )
-        // CHECK: Does first colon really matter???
-        full = String::from("file://") + astr.substring(0, 3) + &utf8_percent_encode(&astr.substring(3, full.len()), NON_ALPHANUMERIC).to_string();
-    } else {
-        full = String::from("file://") + &utf8_percent_encode(&full.as_str(), NON_ALPHANUMERIC).to_string();
-    }
-    full
-}
-
 fn log(reason: &str, trk: &Track) {
     log::debug!("{} File:{}, Title:{}, Album/Artist:{}, Dur:{}, Sim:{:.18}, Genres:{:?}",
                 reason, trk.file, trk.title, trk.album, trk.duration, trk.sim, trk.genres);
@@ -295,7 +207,6 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     let norepart = payload.norepart.unwrap_or(0);
     let norepalb = payload.norepalb.unwrap_or(0);
     let genregroups = &payload.genregroups;
-    let mpath = fix_mpath(&payload.mpath);
     let mut seeds:Vec<Track> = Vec::new();
     // Tracks filtered out due to title matching seed or chosen track
     let mut filter_out_titles:HashSet<String> = HashSet::new();
@@ -333,7 +244,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     if let Some(previous) = &payload.previous {
         let mut pcount = 0;
         for track in previous {
-            let trk:Track = get_track(&db, &track, &mpath);
+            let trk:Track = get_track(&db, &track);
             if !trk.found {
                 continue;
             }
@@ -357,7 +268,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 
     // Find seeds in DB
     for track in &payload.tracks {
-        let trk:Track = get_track(&db, &track, &mpath);
+        let trk:Track = get_track(&db, &track);
         if !trk.found {
             continue;
         }
@@ -557,7 +468,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 
     let mut resp = String::new();
     for track in chosen {
-        resp += &(encode_path(&track.file, &mpath).to_string());
+        resp += &track.file;
         resp += "\n";
     }
     resp
@@ -570,7 +481,6 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
     let filtergenre = payload.filtergenre.unwrap_or(0);
     let min = payload.min.unwrap_or(0);
     let max = payload.max.unwrap_or(0);
-    let mpath = fix_mpath(&payload.mpath);
     let track = &payload.track;
     let byartist = payload.byartist;
     let genregroups = &payload.genregroups;
@@ -585,7 +495,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
         count = MAX_COUNT;
     }
 
-    let seed:Track = get_track(&db, &track, &mpath);
+    let seed:Track = get_track(&db, &track);
     if seed.found {
         if filtergenre==1 {
             for group in genregroups {
@@ -640,7 +550,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
 
     let mut resp = String::new();
     for track in chosen {
-        resp += &(encode_path(&track, &mpath).to_string());
+        resp += &track;
         resp += "\n";
     }
     resp

@@ -170,7 +170,7 @@ impl Db {
         }
     }
 
-    pub fn get_rowid(&self, path: &String) -> usize {
+    pub fn get_rowid(&self, path: &str) -> usize {
         let mut id:usize = 0;
         match self.conn.prepare("SELECT rowid FROM Tracks WHERE File=:path;") {
             Ok(mut stmt) => {
