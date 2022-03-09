@@ -324,6 +324,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         let mut accepted_for_seed = 0;
         match db.get_metrics(seed.id) {
             Ok(metrics) => {
+                log::debug!("Looking for tracks similar to '{}'", seed.file);
                 let sim_tracks = tree.get_similars(&metrics, num_sim);
                 for sim_track in sim_tracks {
                     if filter_out_ids.contains(&sim_track.id) {
@@ -495,6 +496,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
         count = MAX_COUNT;
     }
 
+    log::debug!("Looking for tracks similar to '{}'", track);
     let seed:Track = get_track(&db, &track);
     if seed.found {
         if filtergenre==1 {
