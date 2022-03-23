@@ -5,8 +5,7 @@
  * GPLv3 license.
  *
  **/
-
-use actix_web::{App, HttpServer, client, web};
+use actix_web::{client, web, App, HttpServer};
 use argparse::{ArgumentParser, Store, StoreTrue};
 use std::path::Path;
 use std::process;
@@ -17,7 +16,7 @@ mod upload;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-async fn send_port_to_lms(lms_server:&String, port:u16) {
+async fn send_port_to_lms(lms_server: &String, port: u16) {
     if !lms_server.is_empty() {
         // Inform LMS of port number in use
         let client = client::Client::default();
@@ -31,9 +30,18 @@ async fn send_port_to_lms(lms_server:&String, port:u16) {
             ]
         });
 
-        match client.post(format!("http://{}:9000/jsonrpc.js", lms_server)).send_json(&request).await {
-            Ok(_) => { log::debug!("LMS updated"); }
-            Err(e) => { log::error!("Failed to update LMS. {}", e); process::exit(-1); }
+        match client
+            .post(format!("http://{}:9000/jsonrpc.js", lms_server))
+            .send_json(&request)
+            .await
+        {
+            Ok(_) => {
+                log::debug!("LMS updated");
+            }
+            Err(e) => {
+                log::error!("Failed to update LMS. {}", e);
+                process::exit(-1);
+            }
         }
     }
 }
@@ -41,7 +49,7 @@ async fn send_port_to_lms(lms_server:&String, port:u16) {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let mut db_path = "bliss.db".to_string();
-    let mut port:u16 = 12000;
+    let mut port: u16 = 12000;
     let mut address = "0.0.0.0".to_string();
     let mut logging = "warn".to_string();
     let mut lms_server = String::new();
@@ -56,16 +64,39 @@ async fn main() -> std::io::Result<()> {
         // borrow per scope, hence this section is enclosed in { }
         let mut arg_parse = ArgumentParser::new();
         arg_parse.set_description(&description);
-        arg_parse.refer(&mut db_path).add_option(&["-d", "--db"], Store, &db_path_help);
-        arg_parse.refer(&mut port).add_option(&["-p", "--port"], Store, &port_help);
-        arg_parse.refer(&mut address).add_option(&["-a", "--address"], Store, &address_help);
-        arg_parse.refer(&mut logging).add_option(&["-l", "--logging"], Store, "Log level (trace, debug, info, warn, error)");
-        arg_parse.refer(&mut lms_server).add_option(&["-L", "--lms"], Store, "LMS server (hostname or IP address)");
-        arg_parse.refer(&mut allow_db_upload).add_option(&["-u", "--upload"], StoreTrue, "Allow uploading of database");
+        arg_parse
+            .refer(&mut db_path)
+            .add_option(&["-d", "--db"], Store, &db_path_help);
+        arg_parse
+            .refer(&mut port)
+            .add_option(&["-p", "--port"], Store, &port_help);
+        arg_parse
+            .refer(&mut address)
+            .add_option(&["-a", "--address"], Store, &address_help);
+        arg_parse.refer(&mut logging).add_option(
+            &["-l", "--logging"],
+            Store,
+            "Log level (trace, debug, info, warn, error)",
+        );
+        arg_parse.refer(&mut lms_server).add_option(
+            &["-L", "--lms"],
+            Store,
+            "LMS server (hostname or IP address)",
+        );
+        arg_parse.refer(&mut allow_db_upload).add_option(
+            &["-u", "--upload"],
+            StoreTrue,
+            "Allow uploading of database",
+        );
         arg_parse.parse_args_or_exit();
     }
 
-    if logging.eq_ignore_ascii_case("trace") || logging.eq_ignore_ascii_case("debug") || logging.eq_ignore_ascii_case("info") || logging.eq_ignore_ascii_case("warn") || logging.eq_ignore_ascii_case("error") {
+    if logging.eq_ignore_ascii_case("trace")
+        || logging.eq_ignore_ascii_case("debug")
+        || logging.eq_ignore_ascii_case("info")
+        || logging.eq_ignore_ascii_case("warn")
+        || logging.eq_ignore_ascii_case("error")
+    {
         env_logger::init_from_env(env_logger::Env::default().filter_or("XXXXXXXX", logging));
     } else {
         env_logger::init_from_env(env_logger::Env::default().filter_or("XXXXXXXX", "ERROR"));
@@ -73,7 +104,7 @@ async fn main() -> std::io::Result<()> {
         process::exit(-1);
     }
 
-    if db_path.len()<3 {
+    if db_path.len() < 3 {
         log::error!("Invalid DB path ({}) supplied", db_path);
         process::exit(-1);
     }
@@ -98,17 +129,16 @@ async fn main() -> std::io::Result<()> {
 
     if allow_db_upload {
         log::info!("Starting in upload mode");
-        let server = HttpServer::new(move|| {
+        let server = HttpServer::new(move || {
             App::new()
                 .data(db_path.clone())
                 .app_data(web::PayloadConfig::new(200 * 1024 * 1024))
                 .route("/upload", web::put().to(upload::handle_upload))
-        }).bind((address, port))?;
+        })
+        .bind((address, port))?;
         send_port_to_lms(&lms_server, server.addrs()[0].port()).await;
 
-        server
-        .run()
-        .await
+        server.run().await
     } else {
         log::info!("Starting in mix mode");
         let mut tree = tree::Tree::new();
@@ -118,17 +148,16 @@ async fn main() -> std::io::Result<()> {
             db.close();
         }
 
-        let server = HttpServer::new(move|| {
+        let server = HttpServer::new(move || {
             App::new()
                 .data(tree.clone())
                 .data(db_path.clone())
                 .route("/api/mix", web::post().to(api::mix))
                 .route("/api/list", web::post().to(api::list))
-        }).bind((address, port))?;
+        })
+        .bind((address, port))?;
         send_port_to_lms(&lms_server, server.addrs()[0].port()).await;
 
-        server
-        .run()
-        .await
+        server.run().await
     }
 }

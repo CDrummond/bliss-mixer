@@ -1,3 +1,4 @@
+use kiddo::distance::squared_euclidean;
 /**
  * BlissMixer: Use Bliss analysis results to create music mixes
  *
@@ -5,20 +6,18 @@
  * GPLv3 license.
  *
  **/
- 
 use kiddo::KdTree;
-use kiddo::distance::squared_euclidean;
 
 pub const DIMENSIONS: usize = 20;
 
 #[derive(Clone)]
 pub struct Tree {
-    pub tree: KdTree<f32, usize, DIMENSIONS>
+    pub tree: KdTree<f32, usize, DIMENSIONS>,
 }
 
 pub struct Sim {
     pub id: usize,
-    pub sim: f32
+    pub sim: f32,
 }
 
 impl Tree {
@@ -36,12 +35,12 @@ impl Tree {
                 for neighbour in &neighbours {
                     let item = Sim {
                         id: *neighbour.1,
-                        sim: neighbour.0
+                        sim: neighbour.0,
                     };
                     resp.push(item);
                 }
             }
-            Err(_e) => { }
+            Err(_e) => {}
         }
 
         resp
