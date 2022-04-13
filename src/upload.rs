@@ -5,6 +5,7 @@
  * GPLv3 license.
  *
  **/
+
 use actix_web::{web, HttpRequest, Responder};
 use rusqlite::Connection;
 use std::fs;

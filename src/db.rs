@@ -1,4 +1,3 @@
-use crate::tree;
 /**
  * BlissMixer: Use Bliss analysis results to create music mixes
  *
@@ -6,6 +5,8 @@ use crate::tree;
  * GPLv3 license.
  *
  **/
+
+use crate::tree;
 use rusqlite::Connection;
 
 pub struct Metadata {

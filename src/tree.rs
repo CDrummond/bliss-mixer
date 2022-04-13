@@ -1,4 +1,3 @@
-use kiddo::distance::squared_euclidean;
 /**
  * BlissMixer: Use Bliss analysis results to create music mixes
  *
@@ -6,6 +5,8 @@ use kiddo::distance::squared_euclidean;
  * GPLv3 license.
  *
  **/
+
+use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
 
 pub const DIMENSIONS: usize = 20;

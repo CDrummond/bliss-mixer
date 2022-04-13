@@ -1,5 +1,3 @@
-use crate::db;
-use crate::tree;
 /**
  * BlissMixer: Use Bliss analysis results to create music mixes
  *
@@ -7,6 +5,9 @@ use crate::tree;
  * GPLv3 license.
  *
  **/
+
+use crate::db;
+use crate::tree;
 use actix_web::{web, HttpRequest, Responder};
 use chrono::Datelike;
 use rand::seq::SliceRandom;

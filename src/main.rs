@@ -5,6 +5,7 @@
  * GPLv3 license.
  *
  **/
+
 use actix_web::{client, web, App, HttpServer};
 use argparse::{ArgumentParser, Store, StoreTrue};
 use std::path::Path;
