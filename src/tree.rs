@@ -41,7 +41,7 @@ impl Tree {
                     resp.push(item);
                 }
             }
-            Err(_e) => {}
+            Err(_e) => { }
         }
 
         resp

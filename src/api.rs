@@ -106,10 +106,8 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
             if info.album_artist.is_empty() {
                 info.album = m.album.unwrap_or(String::new()).to_lowercase() + "::" + &info.artist;
             } else {
-                info.is_various =
-                    info.album_artist == VARIOUS || info.album_artist == VARIOUS_ARTISTS;
-                info.album =
-                    m.album.unwrap_or(String::new()).to_lowercase() + "::" + &info.album_artist;
+                info.is_various = info.album_artist == VARIOUS || info.album_artist == VARIOUS_ARTISTS;
+                info.album = m.album.unwrap_or(String::new()).to_lowercase() + "::" + &info.album_artist;
             }
             let genre = m.genre.unwrap_or(String::new());
             let genres: Vec<&str> = genre.split(";").collect();
@@ -176,20 +174,14 @@ fn get_genres(genregroups: &Vec<Vec<String>>, track_genres: &HashSet<String>) ->
     genres
 }
 
-fn filter_genre(
-    track_genres: &HashSet<String>,
-    acceptable_genres: &HashSet<String>,
-    all_genres_from_genregroups: &HashSet<String>,
-) -> bool {
+fn filter_genre(track_genres: &HashSet<String>, acceptable_genres: &HashSet<String>, all_genres_from_groups: &HashSet<String>) -> bool {
     let mut rv: bool = false;
     if track_genres.is_empty() {
         rv = false;
     } else {
         if acceptable_genres.is_empty() {
             // Seed is not in a genre group...
-            if !all_genres_from_genregroups.is_empty()
-                && !track_genres.is_disjoint(all_genres_from_genregroups)
-            {
+            if !all_genres_from_groups.is_empty() && !track_genres.is_disjoint(all_genres_from_groups) {
                 // ...but candidate track is in a genre group - so filter out track
                 rv = true
             }
@@ -201,16 +193,7 @@ fn filter_genre(
 }
 
 fn log(reason: &str, trk: &Track) {
-    log::debug!(
-        "{} File:{}, Title:{}, Album/Artist:{}, Dur:{}, Sim:{:.18}, Genres:{:?}",
-        reason,
-        trk.file,
-        trk.title,
-        trk.album,
-        trk.duration,
-        trk.sim,
-        trk.genres
-    );
+    log::debug!("{} File:{}, Title:{}, Album/Artist:{}, Dur:{}, Sim:{:.18}, Genres:{:?}", reason, trk.file, trk.title, trk.album, trk.duration, trk.sim, trk.genres);
 }
 
 pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Responder {
@@ -238,7 +221,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     // All acceptable genres
     let mut acceptable_genres: HashSet<String> = HashSet::new();
     // All genres that are in a group, genres not in a group are in 'other genres'
-    let mut all_genres_from_genregroups: HashSet<String> = HashSet::new();
+    let mut all_genres_from_groups: HashSet<String> = HashSet::new();
     // Albums from matching tracks. Don't want same album chosen twice, even if
     // norepalb is 0 or album is a VA album.
     let mut chosen_albums: HashSet<String> = HashSet::new();
@@ -255,7 +238,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 
     for group in genregroups {
         for genre in group {
-            all_genres_from_genregroups.insert(genre.to_string());
+            all_genres_from_groups.insert(genre.to_string());
         }
     }
 
@@ -302,16 +285,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         seeds.push(trk);
     }
 
-    log::debug!(
-        "filtergenre:{}, filterxmas:{}, min:{}, max:{}, shuffle:{}, norepart:{}, norepalb:{}",
-        filtergenre,
-        filterxmas,
-        min,
-        max,
-        shuffle,
-        norepart,
-        norepalb
-    );
+    log::debug!("filtergenre:{}, filterxmas:{}, min:{}, max:{}, shuffle:{}, norepart:{}, norepalb:{}", filtergenre, filterxmas, min, max, shuffle, norepart, norepalb);
 
     if filtergenre == 1 {
         log::debug!("Acceptable genres: {:?}", acceptable_genres);
@@ -372,13 +346,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                             log("DISCARD(duration)", &trk);
                             continue;
                         }
-                        if filtergenre == 1
-                            && filter_genre(
-                                &trk.genres,
-                                &acceptable_genres,
-                                &all_genres_from_genregroups,
-                            )
-                        {
+                        if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
                             log("DISCARD(genre)", &trk);
                             continue;
                         }
@@ -403,10 +371,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                                 // track later.
                                 match matched_artists.get_mut(&trk.artist) {
                                     Some(artist) => {
-                                        if artist.tracks.len() < MAX_ARTIST_TRACKS
-                                            && (sim_track.sim - artist.tracks[0].sim)
-                                                < MAX_ARTIST_TRACK_SIM_DIFF
-                                        {
+                                        if artist.tracks.len() < MAX_ARTIST_TRACKS && (sim_track.sim - artist.tracks[0].sim) < MAX_ARTIST_TRACK_SIM_DIFF {
                                             artist.tracks.push(track_file.clone())
                                         }
                                     }
@@ -417,8 +382,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                             filtered.push(track_file);
                             continue;
                         }
-                        if !trk.is_various && norepalb > 0 && filter_out_albums.contains(&trk.album)
-                        {
+                        if !trk.is_various && norepalb > 0 && filter_out_albums.contains(&trk.album) {
                             log("FILTER(album)", &trk);
                             filtered.push(track_file);
                             continue;
@@ -459,7 +423,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                     }
                 }
             }
-            Err(_) => {}
+            Err(_) => { }
         }
     }
     db.close();
@@ -478,11 +442,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         // For each artist that had multiple similar tracks, choose one at random
         for (name, info) in matched_artists {
             if info.tracks.len() > 1 {
-                log::debug!(
-                    "Choosing random track for {} ({} tracks)",
-                    name,
-                    info.tracks.len()
-                );
+                log::debug!("Choosing random track for {} ({} tracks)", name, info.tracks.len());
                 match info.tracks.choose(&mut thread_rng()) {
                     Some(trk) => {
                         chosen[info.pos].file = trk.file.clone();
@@ -533,7 +493,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
     let byartist = payload.byartist;
     let genregroups = &payload.genregroups;
     let mut acceptable_genres: HashSet<String> = HashSet::new();
-    let mut all_genres_from_genregroups: HashSet<String> = HashSet::new();
+    let mut all_genres_from_groups: HashSet<String> = HashSet::new();
     let mut chosen: Vec<String> = Vec::new();
     let mut filter_out_titles: HashSet<String> = HashSet::new();
 
@@ -549,7 +509,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
         if filtergenre == 1 {
             for group in genregroups {
                 for genre in group {
-                    all_genres_from_genregroups.insert(genre.to_string());
+                    all_genres_from_groups.insert(genre.to_string());
                 }
             }
             if !seed.genres.is_empty() {
@@ -582,13 +542,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
                         log("FILTER(title)", &trk);
                         continue;
                     }
-                    if filtergenre == 1
-                        && filter_genre(
-                            &trk.genres,
-                            &acceptable_genres,
-                            &all_genres_from_genregroups,
-                        )
-                    {
+                    if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
                         log("DISCARD(genre)", &trk);
                         continue;
                     }
