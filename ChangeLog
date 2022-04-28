@@ -1,3 +1,7 @@
+0.0.3
+-----
+1. Add /api/ready check status.
+
 0.0.2
 -----
 1. Remove path conversion and have caller be responsible for this.

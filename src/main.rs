@@ -127,6 +127,7 @@ async fn main() -> std::io::Result<()> {
                 .data(db_path.clone())
                 .route("/api/mix", web::post().to(api::mix))
                 .route("/api/list", web::post().to(api::list))
+                .route("/api/ready", web::get().to(api::ready))
         }).bind((address, port))?;
         send_port_to_lms(&lms_server, server.addrs()[0].port()).await;
 

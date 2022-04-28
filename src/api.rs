@@ -564,3 +564,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
     }
     resp
 }
+
+pub async fn ready() -> impl Responder {
+    "1"
+}
