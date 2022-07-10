@@ -8,6 +8,7 @@
 
 use actix_web::{client, web, App, HttpServer};
 use argparse::{ArgumentParser, Store, StoreTrue};
+use std::collections::HashSet;
 use std::path::Path;
 use std::process;
 mod api;
@@ -116,15 +117,18 @@ async fn main() -> std::io::Result<()> {
     } else {
         log::info!("Starting in mix mode");
         let mut tree = tree::Tree::new();
+        let mut all_db_genres = HashSet::new();
         if path.exists() {
             let db = db::Db::new(&db_path);
             db.load_tree(&mut tree);
+            all_db_genres = db.get_all_genres();
             db.close();
         }
 
         let server = HttpServer::new(move || {
             App::new()
                 .data(tree.clone())
+                .data(all_db_genres.clone())
                 .data(db_path.clone())
                 .route("/api/mix", web::post().to(api::mix))
                 .route("/api/list", web::post().to(api::list))

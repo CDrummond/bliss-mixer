@@ -8,6 +8,7 @@
 
 use crate::tree;
 use rusqlite::Connection;
+use std::collections::HashSet;
 
 pub struct Metadata {
     pub file: String,
@@ -170,6 +171,31 @@ impl Db {
             }
         }
         id
+    }
+
+    pub fn get_all_genres(&self) -> HashSet<String> {
+        log::debug!("getting genres from db.");
+        let mut all_available_genres = HashSet::new();
+
+        match self.conn.prepare("SELECT DISTINCT Genre FROM Tracks WHERE ignore IS NOT 1;") {
+            Ok(mut stmt) => match stmt.query_map([], |row| Ok(row.get::<_, Option<String>>(0)?)) {
+                Ok(column) => {
+                    for item in column {
+                        let item_content = item.unwrap().unwrap();
+                        let item_genres: Vec<&str> = item_content.split(";").collect();
+                        for genre in item_genres {
+                            let trimmed_genre = genre.trim();
+                            if !trimmed_genre.is_empty() {
+                                all_available_genres.insert(String::from(trimmed_genre));
+                            }
+                        }
+                    }
+                }
+                Err(e) => { log::debug!("Failed to read all genres: {}", e); }
+            }
+            Err(e) => { log::debug!("Failed to read all genres: {}", e); }
+        }
+        all_available_genres
     }
 
     pub fn get_metadata(&self, id: usize) -> Result<Metadata, rusqlite::Error> {
