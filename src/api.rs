@@ -369,10 +369,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                             // track later.
                             match matched_artists.get_mut(&trk.artist) {
                                 Some(artist) => {
-                                    if artist.tracks.len() < MAX_ARTIST_TRACKS
-                                        && (sim_track.sim - artist.tracks[0].sim).abs()
-                                            < MAX_ARTIST_TRACK_SIM_DIFF
-                                    {
+                                    if artist.tracks.len() < MAX_ARTIST_TRACKS && (sim_track.sim - artist.tracks[0].sim).abs() < MAX_ARTIST_TRACK_SIM_DIFF {
                                         artist.tracks.push(track_file.clone())
                                     }
                                 }

@@ -184,15 +184,13 @@ impl Db {
                     genre: row.get(5)?,
                     duration: row.get(6)?,
                 })
-            })
-            .unwrap();
+            }).unwrap();
         Ok(row)
     }
 
     pub fn get_metrics(&self, id: usize) -> Result<[f32; tree::DIMENSIONS], rusqlite::Error> {
         let mut stmt = self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10 FROM Tracks WHERE rowid=:rowid;").unwrap();
-        let row = stmt
-            .query_row(&[(":rowid", &id)], |row| {
+        let row = stmt.query_row(&[(":rowid", &id)], |row| {
                 Ok((
                     row.get(0)?,
                     row.get(1)?,
@@ -215,8 +213,7 @@ impl Db {
                     row.get(18)?,
                     row.get(19)?,
                 ))
-            })
-            .unwrap();
+            }).unwrap();
         let metrics: [f32; tree::DIMENSIONS] = [
             row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10, row.11,
             row.12, row.13, row.14, row.15, row.16, row.17, row.18, row.19,
