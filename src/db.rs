@@ -30,9 +30,8 @@ impl Db {
     }
 
     pub fn close(self) {
-        match self.conn.close() {
-            Ok(_) => {}
-            Err(_) => {}
+        if let Err(e) = self.conn.close() {
+            log::debug!("Error closing database: {:?}", e);
         }
     }
 
@@ -89,9 +88,8 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    match tree.tree.add(&vals, track.20) {
-                        Ok(_) => { }
-                        Err(_) => { }
+                    if let Err(e) = tree.tree.add(&vals, track.20) {
+                        log::debug!("Error adding track to tree: {}", e);
                     }
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
@@ -153,9 +151,8 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    match tree.tree.add(&vals, track.20) {
-                        Ok(_) => {},
-                        Err(_) => {}
+                    if let Err(e) = tree.tree.add(&vals, track.20) {
+                        log::debug!("Error adding track to tree: {}", e);
                     }
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
@@ -166,17 +163,13 @@ impl Db {
 
     pub fn get_rowid(&self, path: &str) -> usize {
         let mut id: usize = 0;
-        match self
+        if let Ok(mut stmt) = self
             .conn
             .prepare("SELECT rowid FROM Tracks WHERE File=:path;")
         {
-            Ok(mut stmt) => match stmt.query_row(&[(":path", &path)], |row| Ok(row.get(0)?)) {
-                Ok(val) => {
-                    id = val;
-                }
-                Err(_) => {}
-            },
-            Err(_) => {}
+            if let Ok(val) = stmt.query_row(&[(":path", &path)], |row| row.get(0)) {
+                id = val;
+            }
         }
         id
     }

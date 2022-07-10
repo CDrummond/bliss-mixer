@@ -14,7 +14,7 @@ mod db;
 mod tree;
 mod upload;
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 async fn send_port_to_lms(lms_server: &String, port: u16) {
     if !lms_server.is_empty() {

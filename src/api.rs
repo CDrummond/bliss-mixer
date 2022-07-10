@@ -98,20 +98,19 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
             info.id = id;
             info.found = true;
             info.file = m.file;
-            info.title = m.title.unwrap_or(String::new()).to_lowercase();
-            info.orig_artist = m.artist.unwrap_or(String::new());
+            info.title = m.title.unwrap_or_default().to_lowercase();
+            info.orig_artist = m.artist.unwrap_or_default();
             info.artist = info.orig_artist.to_lowercase();
-            info.album_artist = m.album_artist.unwrap_or(String::new()).to_lowercase();
+            info.album_artist = m.album_artist.unwrap_or_default().to_lowercase();
             if info.album_artist.is_empty() {
-                info.album = m.album.unwrap_or(String::new()).to_lowercase() + "::" + &info.artist;
+                info.album = m.album.unwrap_or_default().to_lowercase() + "::" + &info.artist;
             } else {
                 info.is_various =
                     info.album_artist == VARIOUS || info.album_artist == VARIOUS_ARTISTS;
-                info.album =
-                    m.album.unwrap_or(String::new()).to_lowercase() + "::" + &info.album_artist;
+                info.album = m.album.unwrap_or_default().to_lowercase() + "::" + &info.album_artist;
             }
-            let genre = m.genre.unwrap_or(String::new());
-            let genres: Vec<&str> = genre.split(";").collect();
+            let genre = m.genre.unwrap_or_default();
+            let genres: Vec<&str> = genre.split(';').collect();
             for g in genres {
                 let trimmed = g.trim();
                 if !trimmed.is_empty() {
@@ -143,7 +142,7 @@ fn get_track(db: &db::Db, track: &str) -> Track {
         is_various: false,
     };
 
-    let id = db.get_rowid(&track);
+    let id = db.get_rowid(track);
     if id > 0 {
         info = get_track_from_id(db, id);
         if !info.found {
@@ -183,18 +182,14 @@ fn filter_genre(
     let mut rv: bool = false;
     if track_genres.is_empty() {
         rv = false;
-    } else {
-        if acceptable_genres.is_empty() {
-            // Seed is not in a genre group...
-            if !all_genres_from_groups.is_empty()
-                && !track_genres.is_disjoint(all_genres_from_groups)
-            {
-                // ...but candidate track is in a genre group - so filter out track
-                rv = true
-            }
-        } else {
-            rv = track_genres.is_disjoint(acceptable_genres)
+    } else if acceptable_genres.is_empty() {
+        // Seed is not in a genre group...
+        if !all_genres_from_groups.is_empty() && !track_genres.is_disjoint(all_genres_from_groups) {
+            // ...but candidate track is in a genre group - so filter out track
+            rv = true
         }
+    } else {
+        rv = track_genres.is_disjoint(acceptable_genres)
     }
     rv
 }
@@ -215,7 +210,7 @@ fn log(reason: &str, trk: &Track) {
 pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Responder {
     let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
     let db_path = req.app_data::<web::Data<String>>().unwrap();
-    let db = db::Db::new(&db_path);
+    let db = db::Db::new(db_path);
     let mut count = payload.count.unwrap_or(5) as usize;
     let filtergenre = payload.filtergenre.unwrap_or(0);
     let mut filterxmas = payload.filterxmas.unwrap_or(0);
@@ -262,7 +257,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     if let Some(previous) = &payload.previous {
         let mut pcount = 0;
         for track in previous {
-            let trk: Track = get_track(&db, &track);
+            let trk: Track = get_track(&db, track);
             if !trk.found {
                 continue;
             }
@@ -278,7 +273,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
             }
             pcount += 1;
             if filtergenre == 1 && !trk.genres.is_empty() {
-                let genres = get_genres(&genregroups, &trk.genres);
+                let genres = get_genres(genregroups, &trk.genres);
                 acceptable_genres.extend(genres);
             }
         }
@@ -286,12 +281,12 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 
     // Find seeds in DB
     for track in &payload.tracks {
-        let trk: Track = get_track(&db, &track);
+        let trk: Track = get_track(&db, track);
         if !trk.found {
             continue;
         }
         if filtergenre == 1 {
-            let genres = get_genres(&genregroups, &trk.genres);
+            let genres = get_genres(genregroups, &trk.genres);
             acceptable_genres.extend(genres.clone());
         }
         filter_out_ids.insert(trk.id);
@@ -348,117 +343,109 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 
     for seed in seeds {
         let mut accepted_for_seed = 0;
-        match db.get_metrics(seed.id) {
-            Ok(metrics) => {
-                log::debug!("Looking for tracks similar to '{}'", seed.file);
-                let sim_tracks = tree.get_similars(&metrics, num_sim);
-                for sim_track in sim_tracks {
-                    if filter_out_ids.contains(&sim_track.id) {
-                        // Seen from previous seed, so set similarity to lowest value
-                        match id_to_pos.get(&sim_track.id) {
-                            Some(pos) => {
-                                if chosen[*pos].sim > sim_track.sim {
-                                    chosen[*pos].sim = sim_track.sim;
-                                }
+        if let Ok(metrics) = db.get_metrics(seed.id) {
+            log::debug!("Looking for tracks similar to '{}'", seed.file);
+            let sim_tracks = tree.get_similars(&metrics, num_sim);
+            for sim_track in sim_tracks {
+                if filter_out_ids.contains(&sim_track.id) {
+                    // Seen from previous seed, so set similarity to lowest value
+                    match id_to_pos.get(&sim_track.id) {
+                        Some(pos) => {
+                            if chosen[*pos].sim > sim_track.sim {
+                                chosen[*pos].sim = sim_track.sim;
                             }
-                            None => {}
                         }
-                    } else {
-                        filter_out_ids.insert(sim_track.id);
-                        let mut trk: Track = get_track_from_id(&db, sim_track.id);
-                        trk.sim = sim_track.sim;
-                        if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
-                            log("DISCARD(duration)", &trk);
-                            continue;
-                        }
-                        if filtergenre == 1
-                            && filter_genre(
-                                &trk.genres,
-                                &acceptable_genres,
-                                &all_genres_from_groups,
-                            )
-                        {
-                            log("DISCARD(genre)", &trk);
-                            continue;
-                        }
-                        if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
-                            log("DISCARD(christmas)", &trk);
-                            continue;
-                        }
-                        if chosen_albums.contains(&trk.album) {
-                            log("DISCARD(album)", &trk);
-                            continue;
-                        }
-                        let track_file = TrackFile {
-                            file: trk.file.clone(),
-                            sim: trk.sim,
-                        };
-                        if norepart > 0 && filter_out_artists.contains(&trk.artist) {
-                            log("FILTER(artist)", &trk);
-
-                            if shuffle == 1 {
-                                // We have seen this artist before. If this track is close in similarity
-                                // to the first from this artist then store it - we will choose a random
-                                // track later.
-                                match matched_artists.get_mut(&trk.artist) {
-                                    Some(artist) => {
-                                        if artist.tracks.len() < MAX_ARTIST_TRACKS
-                                            && (sim_track.sim - artist.tracks[0].sim).abs()
-                                                < MAX_ARTIST_TRACK_SIM_DIFF
-                                        {
-                                            artist.tracks.push(track_file.clone())
-                                        }
-                                    }
-                                    None => {}
-                                }
-                            }
-
-                            filtered.push(track_file);
-                            continue;
-                        }
-                        if !trk.is_various && norepalb > 0 && filter_out_albums.contains(&trk.album)
-                        {
-                            log("FILTER(album)", &trk);
-                            filtered.push(track_file);
-                            continue;
-                        }
-                        if filter_out_titles.contains(&trk.title) {
-                            log("FILTER(title)", &trk);
-                            filtered.push(track_file);
-                            continue;
-                        }
-                        log("USABLE", &trk);
-                        filter_out_titles.insert(trk.title.clone());
-                        if norepart > 0 {
-                            filter_out_artists.insert(trk.artist.clone());
-                        }
-                        if norepalb > 0 {
-                            filter_out_albums.insert(trk.album.clone());
-                        }
-                        chosen_albums.insert(trk.album.clone());
-                        id_to_pos.insert(trk.id, chosen.len());
-                        chosen.push(track_file.clone());
+                        None => {}
+                    }
+                } else {
+                    filter_out_ids.insert(sim_track.id);
+                    let mut trk: Track = get_track_from_id(&db, sim_track.id);
+                    trk.sim = sim_track.sim;
+                    if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
+                        log("DISCARD(duration)", &trk);
+                        continue;
+                    }
+                    if filtergenre == 1
+                        && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups)
+                    {
+                        log("DISCARD(genre)", &trk);
+                        continue;
+                    }
+                    if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
+                        log("DISCARD(christmas)", &trk);
+                        continue;
+                    }
+                    if chosen_albums.contains(&trk.album) {
+                        log("DISCARD(album)", &trk);
+                        continue;
+                    }
+                    let track_file = TrackFile {
+                        file: trk.file.clone(),
+                        sim: trk.sim,
+                    };
+                    if norepart > 0 && filter_out_artists.contains(&trk.artist) {
+                        log("FILTER(artist)", &trk);
 
                         if shuffle == 1 {
-                            // Store this track linked to artist. Next time we see artist we
-                            // will extend this list of tracks so that we can choose a random
-                            // one later.
-                            let mut matched_artist = MatchedArtist {
-                                pos: chosen.len() - 1,
-                                tracks: Vec::new(),
-                            };
-                            matched_artist.tracks.push(track_file);
-                            matched_artists.insert(trk.artist.clone(), matched_artist);
+                            // We have seen this artist before. If this track is close in similarity
+                            // to the first from this artist then store it - we will choose a random
+                            // track later.
+                            match matched_artists.get_mut(&trk.artist) {
+                                Some(artist) => {
+                                    if artist.tracks.len() < MAX_ARTIST_TRACKS
+                                        && (sim_track.sim - artist.tracks[0].sim).abs()
+                                            < MAX_ARTIST_TRACK_SIM_DIFF
+                                    {
+                                        artist.tracks.push(track_file.clone())
+                                    }
+                                }
+                                None => {}
+                            }
                         }
 
-                        accepted_for_seed += 1;
-                        if accepted_for_seed >= tracks_per_seed {
-                            break;
-                        }
+                        filtered.push(track_file);
+                        continue;
+                    }
+                    if !trk.is_various && norepalb > 0 && filter_out_albums.contains(&trk.album) {
+                        log("FILTER(album)", &trk);
+                        filtered.push(track_file);
+                        continue;
+                    }
+                    if filter_out_titles.contains(&trk.title) {
+                        log("FILTER(title)", &trk);
+                        filtered.push(track_file);
+                        continue;
+                    }
+                    log("USABLE", &trk);
+                    filter_out_titles.insert(trk.title.clone());
+                    if norepart > 0 {
+                        filter_out_artists.insert(trk.artist.clone());
+                    }
+                    if norepalb > 0 {
+                        filter_out_albums.insert(trk.album.clone());
+                    }
+                    chosen_albums.insert(trk.album.clone());
+                    id_to_pos.insert(trk.id, chosen.len());
+                    chosen.push(track_file.clone());
+
+                    if shuffle == 1 {
+                        // Store this track linked to artist. Next time we see artist we
+                        // will extend this list of tracks so that we can choose a random
+                        // one later.
+                        let mut matched_artist = MatchedArtist {
+                            pos: chosen.len() - 1,
+                            tracks: Vec::new(),
+                        };
+                        matched_artist.tracks.push(track_file);
+                        matched_artists.insert(trk.artist.clone(), matched_artist);
+                    }
+
+                    accepted_for_seed += 1;
+                    if accepted_for_seed >= tracks_per_seed {
+                        break;
                     }
                 }
             }
-            Err(_) => {}
         }
     }
     db.close();
@@ -523,7 +510,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 
 pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Responder {
     let db_path = req.app_data::<web::Data<String>>().unwrap();
-    let db = db::Db::new(&db_path);
+    let db = db::Db::new(db_path);
     let mut count = payload.count.unwrap_or(5) as usize;
     let filtergenre = payload.filtergenre.unwrap_or(0);
     let min = payload.min.unwrap_or(0);
@@ -543,7 +530,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
     }
 
     log::debug!("Looking for tracks similar to '{}'", track);
-    let seed: Track = get_track(&db, &track);
+    let seed: Track = get_track(&db, track);
     if seed.found {
         if filtergenre == 1 {
             for group in genregroups {
@@ -552,49 +539,46 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
                 }
             }
             if !seed.genres.is_empty() {
-                let genres = get_genres(&genregroups, &seed.genres);
+                let genres = get_genres(genregroups, &seed.genres);
                 acceptable_genres.extend(genres);
             }
         }
         filter_out_titles.insert(seed.title);
-        match db.get_metrics(seed.id) {
-            Ok(metrics) => {
-                let mut sim_tracks: Vec<tree::Sim> = Vec::new();
+        if let Ok(metrics) = db.get_metrics(seed.id) {
+            let mut sim_tracks: Vec<tree::Sim> = Vec::new();
 
-                if byartist == 1 {
-                    let mut tree = tree::Tree::new();
-                    db.load_artist_tree(&mut tree, &seed.orig_artist);
-                    sim_tracks.extend(tree.get_similars(&metrics, MIN_NUM_SIM));
-                } else {
-                    let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
-                    sim_tracks.extend(tree.get_similars(&metrics, MIN_NUM_SIM));
-                }
-
-                for sim_track in sim_tracks {
-                    let mut trk: Track = get_track_from_id(&db, sim_track.id);
-                    trk.sim = sim_track.sim;
-                    if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
-                        log("DISCARD(duration)", &trk);
-                        continue;
-                    }
-                    if filter_out_titles.contains(&trk.title) {
-                        log("FILTER(title)", &trk);
-                        continue;
-                    }
-                    if filtergenre == 1
-                        && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups)
-                    {
-                        log("DISCARD(genre)", &trk);
-                        continue;
-                    }
-                    chosen.push(trk.file);
-                    if chosen.len() >= count {
-                        break;
-                    }
-                    filter_out_titles.insert(trk.title);
-                }
+            if byartist == 1 {
+                let mut tree = tree::Tree::new();
+                db.load_artist_tree(&mut tree, &seed.orig_artist);
+                sim_tracks.extend(tree.get_similars(&metrics, MIN_NUM_SIM));
+            } else {
+                let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
+                sim_tracks.extend(tree.get_similars(&metrics, MIN_NUM_SIM));
             }
-            Err(_) => {}
+
+            for sim_track in sim_tracks {
+                let mut trk: Track = get_track_from_id(&db, sim_track.id);
+                trk.sim = sim_track.sim;
+                if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
+                    log("DISCARD(duration)", &trk);
+                    continue;
+                }
+                if filter_out_titles.contains(&trk.title) {
+                    log("FILTER(title)", &trk);
+                    continue;
+                }
+                if filtergenre == 1
+                    && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups)
+                {
+                    log("DISCARD(genre)", &trk);
+                    continue;
+                }
+                chosen.push(trk.file);
+                if chosen.len() >= count {
+                    break;
+                }
+                filter_out_titles.insert(trk.title);
+            }
         }
     }
 
