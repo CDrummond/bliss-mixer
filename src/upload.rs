@@ -22,11 +22,7 @@ pub async fn handle_upload(req: HttpRequest, body: web::Bytes) -> impl Responder
 
     if up_path.exists() {
         if let Err(e) = fs::remove_file(up_path) {
-            log::info!(
-                "Could not remove file {}: {} happened",
-                up_path.display(),
-                e
-            );
+            log::info!("Could not remove file {}: {} happened", up_path.display(), e);
         };
     }
 
@@ -61,11 +57,7 @@ pub async fn handle_upload(req: HttpRequest, body: web::Bytes) -> impl Responder
                             match fs::remove_file(orig_path) {
                                 Ok(_) => {}
                                 Err(e) => {
-                                    log::error!(
-                                        "Failed to remove {}. {}",
-                                        orig_path.to_string_lossy(),
-                                        e
-                                    );
+                                    log::error!("Failed to remove {}. {}", orig_path.to_string_lossy(), e);
                                 }
                             }
                         }
@@ -75,12 +67,7 @@ pub async fn handle_upload(req: HttpRequest, body: web::Bytes) -> impl Responder
                             match fs::rename(up_path, orig_path) {
                                 Ok(_) => {}
                                 Err(e) => {
-                                    log::error!(
-                                        "Failed to rename {} to {}. {}",
-                                        up_path.to_string_lossy(),
-                                        orig_path.to_string_lossy(),
-                                        e
-                                    );
+                                    log::error!("Failed to rename {} to {}. {}", up_path.to_string_lossy(), orig_path.to_string_lossy(), e);
                                 }
                             }
                         }

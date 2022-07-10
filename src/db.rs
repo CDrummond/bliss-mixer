@@ -5,6 +5,7 @@
  * GPLv3 license.
  *
  **/
+
 use crate::tree;
 use rusqlite::Connection;
 
@@ -163,10 +164,7 @@ impl Db {
 
     pub fn get_rowid(&self, path: &str) -> usize {
         let mut id: usize = 0;
-        if let Ok(mut stmt) = self
-            .conn
-            .prepare("SELECT rowid FROM Tracks WHERE File=:path;")
-        {
+        if let Ok(mut stmt) = self.conn.prepare("SELECT rowid FROM Tracks WHERE File=:path;") {
             if let Ok(val) = stmt.query_row(&[(":path", &path)], |row| row.get(0)) {
                 id = val;
             }
@@ -176,8 +174,7 @@ impl Db {
 
     pub fn get_metadata(&self, id: usize) -> Result<Metadata, rusqlite::Error> {
         let mut stmt = self.conn.prepare("SELECT File, Title, Artist, AlbumArtist, Album, Genre, Duration FROM Tracks WHERE rowid=:rowid;")?;
-        let row = stmt
-            .query_row(&[(":rowid", &id)], |row| {
+        let row = stmt.query_row(&[(":rowid", &id)], |row| {
                 Ok(Metadata {
                     file: row.get(0)?,
                     title: row.get(1)?,

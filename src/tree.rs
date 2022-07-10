@@ -5,6 +5,7 @@
  * GPLv3 license.
  *
  **/
+
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
 
