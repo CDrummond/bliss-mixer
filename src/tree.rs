@@ -5,7 +5,6 @@
  * GPLv3 license.
  *
  **/
-
 use kiddo::distance::squared_euclidean;
 use kiddo::KdTree;
 
@@ -41,7 +40,7 @@ impl Tree {
                     resp.push(item);
                 }
             }
-            Err(_e) => { }
+            Err(_e) => {}
         }
 
         resp
