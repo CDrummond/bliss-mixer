@@ -193,7 +193,7 @@ fn expand_wildcarded_genres(genregroups: &Vec<Vec<String>>, all_db_genres: &Hash
         for genre in group {
             let lgenre = genre.to_lowercase();
             if lgenre.contains("*") {
-                let glob = Glob::new(lgenre).unwrap().compile_matcher();
+                let glob = Glob::new(&lgenre).unwrap().compile_matcher();
                 for item in all_db_genres {
                     if glob.is_match(item) {
                         gset.insert(item.to_string());

@@ -121,8 +121,9 @@ async fn main() -> std::io::Result<()> {
         if path.exists() {
             let db = db::Db::new(&db_path);
             db.load_tree(&mut tree);
-            for genre in db.get_all_genres():
+            for genre in db.get_all_genres() {
                 all_db_genres.insert(genre.to_lowercase());
+            }
             db.close();
         }
 
