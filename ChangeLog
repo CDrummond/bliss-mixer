@@ -1,4 +1,4 @@
-0.0.4
+0.1.0
 -----
 1. When checking for artist track similarity difference, use absolute value.
 2. Allow usage of wildcard when specifying genregroups. Thanks to chincheta0815
