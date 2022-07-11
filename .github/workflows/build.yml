@@ -14,13 +14,10 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v1
 
-    - name: Build ARMv7
-      run: docker run --rm -v $(pwd):/source dlecan/rust-crosscompiler-arm:stable
-
-    - name: Build other binaries (x86_64, ARMv8)
+    - name: Build x86_64 and ARM
       run: |
-        docker build -t bliss-mixer-cross - < docker/Dockerfile
-        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-mixer-cross
+        docker build -t bliss-mixer - < docker/Dockerfile
+        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-mixer
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
