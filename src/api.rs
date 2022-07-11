@@ -116,7 +116,7 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
             for g in genres {
                 let trimmed = g.trim();
                 if !trimmed.is_empty() {
-                    info.genres.insert(String::from(trimmed));
+                    info.genres.insert(String::from(trimmed.to_lowercase()));
                 }
             }
             info.duration = m.duration.unwrap_or(0);
@@ -162,7 +162,6 @@ fn get_genres(genregroups: &Vec<HashSet<String>>, track_genres: &HashSet<String>
     for group in genregroups {
         if track_genres.is_subset(group) {
             for genre in group {
-                log::debug!("XXXXX {}", genre);
                 genres.insert(genre.to_string());
             }
         }
@@ -192,15 +191,16 @@ fn expand_wildcarded_genres(genregroups: &Vec<Vec<String>>, all_db_genres: &Hash
     for group in genregroups {
         let mut gset: HashSet<String> = HashSet::new();
         for genre in group {
-            if genre.contains("*") {
-                let glob = Glob::new(genre).unwrap().compile_matcher();
+            let lgenre = genre.to_lowercase();
+            if lgenre.contains("*") {
+                let glob = Glob::new(lgenre).unwrap().compile_matcher();
                 for item in all_db_genres {
                     if glob.is_match(item) {
                         gset.insert(item.to_string());
                     }
                 }
             } else {
-                gset.insert(genre.to_string());
+                gset.insert(lgenre.to_string());
             }
         }
         expanded.push(gset);
