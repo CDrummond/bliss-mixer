@@ -185,22 +185,18 @@ fn filter_genre(track_genres: &HashSet<String>, acceptable_genres: &HashSet<Stri
     rv
 }
 
-fn expand_wildcarded_genres(genregroups: &Vec<Vec<String>>, all_db_genres: &HashSet<String>) -> Vec<HashSet<String>> {
+fn expand_globbed_genres(genregroups: &Vec<Vec<String>>, all_db_genres: &HashSet<String>) -> Vec<HashSet<String>> {
     let mut expanded: Vec<HashSet<String>> = Vec::new();
 
     for group in genregroups {
         let mut gset: HashSet<String> = HashSet::new();
         for genre in group {
             let lgenre = genre.to_lowercase();
-            if lgenre.contains("*") {
-                let glob = Glob::new(&lgenre).unwrap().compile_matcher();
-                for item in all_db_genres {
-                    if glob.is_match(item) {
-                        gset.insert(item.to_string());
-                    }
+            let glob = Glob::new(&lgenre).unwrap().compile_matcher();
+            for item in all_db_genres {
+                if glob.is_match(item) {
+                    gset.insert(item.to_string());
                 }
-            } else {
-                gset.insert(lgenre.to_string());
             }
         }
         expanded.push(gset);
@@ -225,7 +221,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     let shuffle = payload.shuffle.unwrap_or(0);
     let norepart = payload.norepart.unwrap_or(0);
     let norepalb = payload.norepalb.unwrap_or(0);
-    let genregroups = expand_wildcarded_genres(&payload.genregroups, &all_db_genres);
+    let genregroups = expand_globbed_genres(&payload.genregroups, &all_db_genres);
     let mut seeds: Vec<Track> = Vec::new();
     // Tracks filtered out due to title matching seed or chosen track
     let mut filter_out_titles: HashSet<String> = HashSet::new();
@@ -502,7 +498,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
     let max = payload.max.unwrap_or(0);
     let track = &payload.track;
     let byartist = payload.byartist;
-    let genregroups = expand_wildcarded_genres(&payload.genregroups, &all_db_genres);
+    let genregroups = expand_globbed_genres(&payload.genregroups, &all_db_genres);
     let mut acceptable_genres: HashSet<String> = HashSet::new();
     let mut all_genres_from_groups: HashSet<String> = HashSet::new();
     let mut chosen: Vec<String> = Vec::new();
