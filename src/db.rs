@@ -8,6 +8,7 @@
 
 use crate::tree;
 use rusqlite::Connection;
+use std::collections::{HashSet};
 
 pub struct Metadata {
     pub file: String,
@@ -31,8 +32,9 @@ impl Db {
     }
 
     pub fn close(self) {
-        if let Err(e) = self.conn.close() {
-            log::debug!("Error closing database: {:?}", e);
+        match self.conn.close() {
+            Ok(_) => { }
+            Err(_) => { }
         }
     }
 
@@ -89,8 +91,9 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    if let Err(e) = tree.tree.add(&vals, track.20) {
-                        log::debug!("Error adding track to tree: {}", e);
+                    match tree.tree.add(&vals, track.20) {
+                        Ok(_) => { }
+                        Err(_) => { }
                     }
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
@@ -152,8 +155,9 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    if let Err(e) = tree.tree.add(&vals, track.20) {
-                        log::debug!("Error adding track to tree: {}", e);
+                    match tree.tree.add(&vals, track.20) {
+                        Ok(_) => {},
+                        Err(_) => {}
                     }
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
@@ -164,13 +168,41 @@ impl Db {
 
     pub fn get_rowid(&self, path: &str) -> usize {
         let mut id: usize = 0;
-        if let Ok(mut stmt) = self.conn.prepare("SELECT rowid FROM Tracks WHERE File=:path;") {
-            if let Ok(val) = stmt.query_row(&[(":path", &path)], |row| row.get(0)) {
-                id = val;
+        match self.conn.prepare("SELECT rowid FROM Tracks WHERE File=:path;") {
+            Ok(mut stmt) => match stmt.query_row(&[(":path", &path)], |row| Ok(row.get(0)?)) {
+                Ok(val) => { id = val; }
+                Err(_) => { }
             }
+            Err(_) => { }
         }
         id
     }
+
+    pub fn get_all_genres(&self) -> HashSet<String> {
+        log::debug!("getting genres from db.");
+        let mut all_available_genres = HashSet::new();
+
+        match self.conn.prepare("SELECT DISTINCT Genre FROM Tracks WHERE ignore IS NOT 1;") {
+            Ok(mut stmt) => match stmt.query_map([], |row| Ok(row.get::<_, Option<String>>(0)?)) {
+                Ok(column) => {
+                    for item in column {
+                        let item_content = item.unwrap().unwrap();
+                        let item_genres: Vec<&str> = item_content.split(";").collect();
+                        for genre in item_genres {
+                            let trimmed_genre = genre.trim();
+                            if !trimmed_genre.is_empty() {
+                                all_available_genres.insert(String::from(trimmed_genre));
+                            }
+                        }
+                    }
+                }
+                Err(e) => { log::debug!("Failed to read all genres: {}", e); }
+            }
+            Err(e) => { log::debug!("Failed to read all genres: {}", e); }
+        }
+        all_available_genres
+    }
+
 
     pub fn get_metadata(&self, id: usize) -> Result<Metadata, rusqlite::Error> {
         let mut stmt = self.conn.prepare("SELECT File, Title, Artist, AlbumArtist, Album, Genre, Duration FROM Tracks WHERE rowid=:rowid;")?;
@@ -184,7 +216,8 @@ impl Db {
                     genre: row.get(5)?,
                     duration: row.get(6)?,
                 })
-            }).unwrap();
+            })
+            .unwrap();
         Ok(row)
     }
 
@@ -213,11 +246,10 @@ impl Db {
                     row.get(18)?,
                     row.get(19)?,
                 ))
-            }).unwrap();
-        let metrics: [f32; tree::DIMENSIONS] = [
-            row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10, row.11,
-            row.12, row.13, row.14, row.15, row.16, row.17, row.18, row.19,
-        ];
+            })
+            .unwrap();
+        let metrics: [f32; tree::DIMENSIONS] = [row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9,
+                                                row.10, row.11, row.12, row.13, row.14, row.15, row.16, row.17, row.18, row.19];
         Ok(metrics)
     }
 }

@@ -8,6 +8,7 @@
 
 use actix_web::{client, web, App, HttpServer};
 use argparse::{ArgumentParser, Store, StoreTrue};
+use std::collections::HashSet;
 use std::path::Path;
 use std::process;
 mod api;
@@ -15,7 +16,7 @@ mod db;
 mod tree;
 mod upload;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 async fn send_port_to_lms(lms_server: &String, port: u16) {
     if !lms_server.is_empty() {
@@ -32,9 +33,7 @@ async fn send_port_to_lms(lms_server: &String, port: u16) {
         });
 
         match client.post(format!("http://{}:9000/jsonrpc.js", lms_server)).send_json(&request).await {
-            Ok(_) => {
-                log::debug!("LMS updated");
-            }
+            Ok(_) => { log::debug!("LMS updated"); }
             Err(e) => {
                 log::error!("Failed to update LMS. {}", e);
                 process::exit(-1);
@@ -109,22 +108,26 @@ async fn main() -> std::io::Result<()> {
                 .data(db_path.clone())
                 .app_data(web::PayloadConfig::new(200 * 1024 * 1024))
                 .route("/upload", web::put().to(upload::handle_upload))
-        }).bind((address, port))?;
+        })
+        .bind((address, port))?;
         send_port_to_lms(&lms_server, server.addrs()[0].port()).await;
 
         server.run().await
     } else {
         log::info!("Starting in mix mode");
         let mut tree = tree::Tree::new();
+        let mut all_db_genres = HashSet::new();
         if path.exists() {
             let db = db::Db::new(&db_path);
             db.load_tree(&mut tree);
+            all_db_genres = db.get_all_genres();
             db.close();
         }
 
         let server = HttpServer::new(move || {
             App::new()
                 .data(tree.clone())
+                .data(all_db_genres.clone())
                 .data(db_path.clone())
                 .route("/api/mix", web::post().to(api::mix))
                 .route("/api/list", web::post().to(api::list))
