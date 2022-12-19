@@ -52,11 +52,13 @@ async fn main() -> std::io::Result<()> {
     let mut logging = "warn".to_string();
     let mut lms_server = String::new();
     let mut allow_db_upload = false;
+    let mut weights = String::new();
     {
         let db_path_help = format!("Database location (default: {})", db_path);
         let port_help = format!("Port number (default: {})", port);
         let address_help = format!("Address to use (default: {})", address);
         let description = format!("Bliss Mixer v{}", VERSION);
+        let weights_help = format!("Comma separated weight factors ({} values)", tree::DIMENSIONS);
 
         // arg_parse.refer 'borrows' db_path, etc, and can only have one
         // borrow per scope, hence this section is enclosed in { }
@@ -68,6 +70,7 @@ async fn main() -> std::io::Result<()> {
         arg_parse.refer(&mut logging).add_option(&["-l", "--logging"], Store, "Log level (trace, debug, info, warn, error)");
         arg_parse.refer(&mut lms_server).add_option(&["-L", "--lms"], Store, "LMS server (hostname or IP address)");
         arg_parse.refer(&mut allow_db_upload).add_option(&["-u", "--upload"], StoreTrue, "Allow uploading of database");
+        arg_parse.refer(&mut weights).add_option(&["-w", "--weights"], Store, &weights_help);
         arg_parse.parse_args_or_exit();
     }
 
@@ -116,6 +119,9 @@ async fn main() -> std::io::Result<()> {
         server.run().await
     } else {
         log::info!("Starting in mix mode");
+        if !weights.is_empty() {
+            db::init_weights(&weights);
+        }
         let mut tree = tree::Tree::new();
         let mut all_db_genres = HashSet::new();
         if path.exists() {

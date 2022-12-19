@@ -10,6 +10,8 @@ use crate::tree;
 use rusqlite::Connection;
 use std::collections::HashSet;
 
+pub static mut WEIGHTS: [f32;tree::DIMENSIONS] = [1.0;tree::DIMENSIONS];
+
 pub struct Metadata {
     pub file: String,
     pub title: Option<String>,
@@ -22,6 +24,30 @@ pub struct Metadata {
 
 pub struct Db {
     pub conn: Connection,
+}
+
+pub fn init_weights(weights_str: &String) {
+    let vals = weights_str.split(",");
+    let mut pos = 0;
+    unsafe {
+        for val in vals {
+            if pos<tree::DIMENSIONS {
+                WEIGHTS[pos] = val.parse::<f32>().unwrap();
+            }
+            pos+=1;
+        }
+        log::debug!("Weights: {:?}", WEIGHTS);
+    }
+}
+
+fn adjust(vals: [f32;tree::DIMENSIONS]) -> [f32;tree::DIMENSIONS] {
+    let mut adjusted: [f32;tree::DIMENSIONS] = [0.0;tree::DIMENSIONS];
+    unsafe {
+        for (i, x) in vals.iter().enumerate() {
+            adjusted[i] = x * WEIGHTS[i];
+        }
+    }
+    adjusted
 }
 
 impl Db {
@@ -90,7 +116,7 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    if let Err(e) = tree.tree.add(&vals, track.20) {
+                    if let Err(e) = tree.tree.add(&adjust(vals), track.20) {
                         log::debug!("Error adding track to tree: {}", e);
                     }
                 }
@@ -153,7 +179,7 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    if let Err(e) = tree.tree.add(&vals, track.20) {
+                    if let Err(e) = tree.tree.add(&adjust(vals), track.20) {
                         log::debug!("Error adding track to tree: {}", e);
                     }
                 }
@@ -244,6 +270,6 @@ impl Db {
             row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10, row.11,
             row.12, row.13, row.14, row.15, row.16, row.17, row.18, row.19,
         ];
-        Ok(metrics)
+        Ok(adjust(metrics))
     }
 }

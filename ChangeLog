@@ -3,6 +3,7 @@
 1. When checking for artist track similarity difference, use absolute value.
 2. Allow usage of wildcard when specifying genregroups. Thanks to chincheta0815
    for initial implementation.
+3. Allow supplying weights for each metric.
 
 0.0.3
 -----
