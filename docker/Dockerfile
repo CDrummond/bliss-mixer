@@ -1,6 +1,6 @@
 # Cross compilation environment for bliss-mixer
 
-FROM debian:bullseye
+FROM debian:stetch
 
 RUN dpkg --add-architecture arm64 && \
     dpkg --add-architecture armhf && \
