@@ -1,3 +1,7 @@
+0.2.0
+-----
+1. Allow specifying maximum BPM difference between tracks.
+
 0.1.0
 -----
 1. When checking for artist track similarity difference, use absolute value.

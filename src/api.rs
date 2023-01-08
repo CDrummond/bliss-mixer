@@ -33,6 +33,7 @@ pub struct MixParams {
     filterxmas: Option<u16>,
     min: Option<u32>,
     max: Option<u32>,
+    maxbpmdiff: Option<i16>,
     tracks: Vec<String>,
     previous: Option<Vec<String>>,
     shuffle: Option<u16>,
@@ -47,9 +48,10 @@ pub struct ListParams {
     filtergenre: Option<u16>,
     min: Option<u32>,
     max: Option<u32>,
+    maxbpmdiff: Option<i16>,
     track: String,
     genregroups: Vec<Vec<String>>,
-    byartist: u16,
+    byartist: i16,
 }
 
 struct Track {
@@ -66,6 +68,7 @@ struct Track {
     duration: u32,
     sim: f32,
     is_various: bool,
+    bpm: i16
 }
 
 #[derive(Clone)]
@@ -93,6 +96,7 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
         duration: 0,
         sim: 0.,
         is_various: false,
+        bpm: 0,
     };
 
     match db.get_metadata(id) {
@@ -120,6 +124,7 @@ fn get_track_from_id(db: &db::Db, id: usize) -> Track {
                 }
             }
             info.duration = m.duration.unwrap_or(0);
+            info.bpm = (((m.tempo.unwrap_or(0.0)+1.0)*206.0)/2.0) as i16;
         }
         Err(e) => {
             log::error!("Failed to read metadata. {}", e);
@@ -142,6 +147,7 @@ fn get_track(db: &db::Db, track: &str) -> Track {
         duration: 0,
         sim: 0.,
         is_various: false,
+        bpm: 0
     };
 
     let id = db.get_rowid(track);
@@ -205,7 +211,7 @@ fn expand_globbed_genres(genregroups: &Vec<Vec<String>>, all_db_genres: &HashSet
 }
 
 fn log(reason: &str, trk: &Track) {
-    log::debug!("{} File:{}, Title:{}, Album/Artist:{}, Dur:{}, Sim:{:.18}, Genres:{:?}", reason, trk.file, trk.title, trk.album, trk.duration, trk.sim, trk.genres);
+    log::debug!("{} File:{}, Title:{}, Album/Artist:{}, Dur:{}, Sim:{:.18}, Genres:{:?}, BPM:{}", reason, trk.file, trk.title, trk.album, trk.duration, trk.sim, trk.genres, trk.bpm);
 }
 
 pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Responder {
@@ -218,6 +224,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     let mut filterxmas = payload.filterxmas.unwrap_or(0);
     let min = payload.min.unwrap_or(0);
     let max = payload.max.unwrap_or(0);
+    let maxbpmdiff = payload.maxbpmdiff.unwrap_or(0);
     let shuffle = payload.shuffle.unwrap_or(0);
     let norepart = payload.norepart.unwrap_or(0);
     let norepalb = payload.norepalb.unwrap_or(0);
@@ -358,6 +365,10 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                         log("DISCARD(duration)", &trk);
                         continue;
                     }
+                    if maxbpmdiff > 0 && trk.bpm> 0 && seed.bpm>0 && (trk.bpm-seed.bpm).abs()>maxbpmdiff {
+                        log("DISCARD(bpm)", &trk);
+                        continue;
+                    }
                     if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
                         log("DISCARD(genre)", &trk);
                         continue;
@@ -496,6 +507,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
     let filtergenre = payload.filtergenre.unwrap_or(0);
     let min = payload.min.unwrap_or(0);
     let max = payload.max.unwrap_or(0);
+    let maxbpmdiff = payload.maxbpmdiff.unwrap_or(0);
     let track = &payload.track;
     let byartist = payload.byartist;
     let genregroups = expand_globbed_genres(&payload.genregroups, &all_db_genres);
@@ -542,6 +554,10 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
                 trk.sim = sim_track.sim;
                 if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
                     log("DISCARD(duration)", &trk);
+                    continue;
+                }
+                if maxbpmdiff > 0 && trk.bpm> 0 && seed.bpm>0 && (trk.bpm-seed.bpm).abs()>maxbpmdiff {
+                    log("DISCARD(bpm)", &trk);
                     continue;
                 }
                 if filter_out_titles.contains(&trk.title) {

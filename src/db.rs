@@ -20,6 +20,7 @@ pub struct Metadata {
     pub album: Option<String>,
     pub genre: Option<String>,
     pub duration: Option<u32>,
+    pub tempo: Option<f32>,
 }
 
 pub struct Db {
@@ -225,7 +226,7 @@ impl Db {
     }
 
     pub fn get_metadata(&self, id: usize) -> Result<Metadata, rusqlite::Error> {
-        let mut stmt = self.conn.prepare("SELECT File, Title, Artist, AlbumArtist, Album, Genre, Duration FROM Tracks WHERE rowid=:rowid;")?;
+        let mut stmt = self.conn.prepare("SELECT File, Title, Artist, AlbumArtist, Album, Genre, Duration, Tempo FROM Tracks WHERE rowid=:rowid;")?;
         let row = stmt.query_row(&[(":rowid", &id)], |row| {
                 Ok(Metadata {
                     file: row.get(0)?,
@@ -235,6 +236,7 @@ impl Db {
                     album: row.get(4)?,
                     genre: row.get(5)?,
                     duration: row.get(6)?,
+                    tempo: row.get(7)?,
                 })
             }).unwrap();
         Ok(row)
