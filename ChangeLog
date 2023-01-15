@@ -1,6 +1,7 @@
 0.2.0
 -----
 1. Allow specifying maximum BPM difference between tracks.
+2. Fix filtering on Christmas.
 
 0.1.0
 -----

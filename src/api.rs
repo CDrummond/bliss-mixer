@@ -16,7 +16,7 @@ use rand::thread_rng;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 
-const CHRISTMAS: &str = "Christmas";
+const CHRISTMAS: &str = "christmas";
 const VARIOUS: &str = "various";
 const VARIOUS_ARTISTS: &str = "various artists";
 const MIN_COUNT: usize = 1;
