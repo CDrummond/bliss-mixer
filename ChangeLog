@@ -1,3 +1,8 @@
+0.3.0
+-----
+1. Optionally use extended isolation forest algorithm to locate similar tracks
+   when more than 1 seed specified.
+
 0.2.0
 -----
 1. Allow specifying maximum BPM difference between tracks.

@@ -1,7 +1,7 @@
 /**
  * BlissMixer: Use Bliss analysis results to create music mixes
  *
- * Copyright (c) 2022-2023 Craig Drummond <craig.p.drummond@gmail.com>
+ * Copyright (c) 2022-2024 Craig Drummond <craig.p.drummond@gmail.com>
  * GPLv3 license.
  *
  **/
@@ -13,6 +13,7 @@ use std::path::Path;
 use std::process;
 mod api;
 mod db;
+mod forest;
 mod tree;
 mod upload;
 
@@ -123,10 +124,11 @@ async fn main() -> std::io::Result<()> {
             db::init_weights(&weights);
         }
         let mut tree = tree::Tree::new();
+        let mut forest = forest::Forest::new();
         let mut all_db_genres = HashSet::new();
         if path.exists() {
             let db = db::Db::new(&db_path);
-            db.load_tree(&mut tree);
+            db.load(&mut tree, &mut forest);
             for genre in db.get_all_genres() {
                 all_db_genres.insert(genre.to_lowercase());
             }
@@ -136,6 +138,7 @@ async fn main() -> std::io::Result<()> {
         let server = HttpServer::new(move || {
             App::new()
                 .data(tree.clone())
+                .data(forest.clone())
                 .data(all_db_genres.clone())
                 .data(db_path.clone())
                 .route("/api/mix", web::post().to(api::mix))

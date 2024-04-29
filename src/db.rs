@@ -1,11 +1,12 @@
 /**
  * BlissMixer: Use Bliss analysis results to create music mixes
  *
- * Copyright (c) 2022-2023 Craig Drummond <craig.p.drummond@gmail.com>
+ * Copyright (c) 2022-2024 Craig Drummond <craig.p.drummond@gmail.com>
  * GPLv3 license.
  *
  **/
 
+use crate::forest;
 use crate::tree;
 use rusqlite::Connection;
 use std::collections::HashSet;
@@ -64,8 +65,8 @@ impl Db {
         }
     }
 
-    pub fn load_tree(&self, tree: &mut tree::Tree) {
-        log::debug!("Load tree");
+    pub fn load(&self, tree: &mut tree::Tree, forest: &mut forest::Forest) {
+        log::debug!("Load tree/forest");
         match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, rowid FROM Tracks WHERE Ignore IS NOT 1") {
             Ok(mut stmt) => {
                 let track_iter = stmt.query_map([], |row| {
@@ -117,9 +118,11 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    if let Err(e) = tree.tree.add(&adjust(vals), track.20) {
+                    let adjusted = adjust(vals);
+                    if let Err(e) = tree.tree.add(&adjusted, track.20) {
                         log::debug!("Error adding track to tree: {}", e);
                     }
+                    forest.add(adjusted, track.20);
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
             }
