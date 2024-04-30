@@ -21,10 +21,6 @@ pub struct Forest {
     all_tracks: Vec<Track>,
 }
 
-fn fdistance(track: &Track, forest: &extended_isolation_forest::Forest<f32, 20>) -> f32 {
-    forest.score(&track.metrics) as f32
-}
-
 impl Forest {
     pub fn new() -> Self {
         Self {
@@ -47,10 +43,10 @@ impl Forest {
             max_tree_depth: None,
             extension_level: 1,
        };
-       let seed_array = seeds.iter().map(|s| s.metrics).collect::<Vec<_>>();
-       let forest = extended_isolation_forest::Forest::from_slice(seed_array.as_slice(), &opts).unwrap();
+       let seed_array = &*seeds.iter().map(|s| s.metrics).collect::<Vec<_>>();
+       let forest = extended_isolation_forest::Forest::from_slice(seed_array, &opts).unwrap();
        let mut all = self.all_tracks.clone();
-       all.sort_by_cached_key(|track| n32(fdistance(track, &forest)));
+       all.sort_by_cached_key(|track| n32(forest.score(&track.metrics) as f32));
        all
     }
 }
