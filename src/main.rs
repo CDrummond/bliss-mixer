@@ -6,7 +6,7 @@
  *
  **/
 
-use actix_web::{client, web, App, HttpServer};
+use actix_web::{client, middleware::Logger, web, App, HttpServer};
 use argparse::{ArgumentParser, Store, StoreTrue};
 use std::collections::HashSet;
 use std::path::Path;
@@ -137,6 +137,7 @@ async fn main() -> std::io::Result<()> {
 
         let server = HttpServer::new(move || {
             App::new()
+                .wrap(Logger::new("%a %{User-Agent}i"))
                 .data(tree.clone())
                 .data(forest.clone())
                 .data(all_db_genres.clone())

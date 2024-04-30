@@ -343,6 +343,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     }
 
     if fseeds.len()>1 {
+        log::debug!("Using extended isolation forest algorithm");
         for track in forest.sort_by_closest(&fseeds) {
             if filter_out_ids.contains(&track.id) {
                 continue;
@@ -404,6 +405,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
             }
         }
     } else {
+        log::debug!("Using standard algorithm");
         useforest = 0;
         // Map of id to its position in chosen. This is used incase a track
         // matches multiple seeds. In which case we want the sim value to
