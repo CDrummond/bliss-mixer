@@ -293,6 +293,9 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         }
     }
 
+    let mut minbpm: i16 = 500;
+    let mut maxbpm: i16 = 0;
+
     // Find seeds in DB
     for track in &payload.tracks {
         let trk: Track = get_track(&db, track);
@@ -306,6 +309,12 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         filter_out_ids.insert(trk.id);
         if !trk.title.is_empty() {
             filter_out_titles.insert(trk.title.clone());
+        }
+        if trk.bpm>maxbpm {
+            maxbpm = trk.bpm
+        }
+        if trk.bpm<minbpm {
+            minbpm = trk.bpm
         }
         seeds.push(trk);
     }
@@ -354,10 +363,10 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                 log("DISCARD(duration)", &trk);
                 continue;
             }
-            //if maxbpmdiff > 0 && trk.bpm> 0 && seed.bpm>0 && (trk.bpm-seed.bpm).abs()>maxbpmdiff {
-            //    log("DISCARD(bpm)", &trk);
-            //    continue;
-            //}
+            if maxbpmdiff > 0 && minbpm > 0 && maxbpm > 0 && trk.bpm>0 && (trk.bpm<(minbpm-maxbpmdiff) || trk.bpm>(maxbpm+maxbpmdiff)) {
+                log("DISCARD(bpm)", &trk);
+                continue;
+            }
             if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
                 log("DISCARD(genre)", &trk);
                 continue;
