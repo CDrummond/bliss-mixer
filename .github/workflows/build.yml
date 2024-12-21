@@ -20,7 +20,7 @@ jobs:
         docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-mixer
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: bliss-mixer-linux
         path: releases/
@@ -63,7 +63,7 @@ jobs:
         rm releases/bliss-mixer-x86_64 releases/bliss-mixer-arm64
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: bliss-mixer-mac
         path: releases/
@@ -79,7 +79,7 @@ jobs:
       run: cargo build --release
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: bliss-mixer.exe
         path: target/release/bliss-mixer.exe
