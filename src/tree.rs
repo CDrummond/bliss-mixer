@@ -30,7 +30,7 @@ impl Tree {
     pub fn get_similars(&self, seed: &[f32; DIMENSIONS], count: usize) -> Vec<Sim> {
         let mut resp = Vec::<Sim>::new();
 
-        let neighbours =  self.tree.nearest_n::<SquaredEuclidean>(seed, count);// {
+        let neighbours =  self.tree.nearest_n::<SquaredEuclidean>(seed, count);
         for neighbour in &neighbours {
             let item = Sim {
                 id:  neighbour.item,
