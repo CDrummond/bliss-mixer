@@ -2,6 +2,11 @@
 -----
 1. Optionally use extended isolation forest algorithm to locate similar tracks
    when more than 1 seed specified.
+1. Update library versions.
+
+0.2.1
+-----
+1. Use "host:port" as LMS address.
 
 0.2.0
 -----

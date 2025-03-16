@@ -6,18 +6,17 @@
  *
  **/
 
-use kiddo::distance::squared_euclidean;
-use kiddo::KdTree;
+use kiddo::{KdTree, SquaredEuclidean};
 
 pub const DIMENSIONS: usize = 20;
 
 #[derive(Clone)]
 pub struct Tree {
-    pub tree: KdTree<f32, usize, DIMENSIONS>,
+    pub tree: KdTree<f32, DIMENSIONS>,
 }
 
 pub struct Sim {
-    pub id: usize,
+    pub id: u64,
     pub sim: f32,
 }
 
@@ -31,17 +30,13 @@ impl Tree {
     pub fn get_similars(&self, seed: &[f32; DIMENSIONS], count: usize) -> Vec<Sim> {
         let mut resp = Vec::<Sim>::new();
 
-        match self.tree.nearest(seed, count, &squared_euclidean) {
-            Ok(neighbours) => {
-                for neighbour in &neighbours {
-                    let item = Sim {
-                        id: *neighbour.1,
-                        sim: neighbour.0,
-                    };
-                    resp.push(item);
-                }
-            }
-            Err(_e) => {}
+        let neighbours =  self.tree.nearest_n::<SquaredEuclidean>(seed, count);
+        for neighbour in &neighbours {
+            let item = Sim {
+                id:  neighbour.item,
+                sim: neighbour.distance,
+            };
+            resp.push(item);
         }
 
         resp

@@ -59,7 +59,7 @@ pub struct ListParams {
 #[derive(Clone)]
 struct Track {
     found: bool,
-    id: usize,
+    id: u64,
     file: String,
     title: String,
     // Original artist, so that can use for api/list
@@ -85,7 +85,7 @@ struct MatchedArtist {
     tracks: Vec<TrackFile>,
 }
 
-fn get_track_from_id(db: &db::Db, id: usize) -> Track {
+fn get_track_from_id(db: &db::Db, id: u64) -> Track {
     let mut info = Track {
         found: false,
         id: 0,
@@ -242,7 +242,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     // Tracks filtered out due to album matching seed or chosen track
     let mut filter_out_albums: HashSet<String> = HashSet::new();
     // IDs of seeds, previous, and chosen tracks - to prevent duplicates
-    let mut filter_out_ids: HashSet<usize> = HashSet::new();
+    let mut filter_out_ids: HashSet<u64> = HashSet::new();
     // All acceptable genres
     let mut acceptable_genres: HashSet<String> = HashSet::new();
     // All genres that are in a group, genres not in a group are in 'other genres'
@@ -419,7 +419,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         // Map of id to its position in chosen. This is used incase a track
         // matches multiple seeds. In which case we want the sim value to
         // be the lowest of its matches
-        let mut id_to_pos: HashMap<usize, usize> = HashMap::new();
+        let mut id_to_pos: HashMap<u64, usize> = HashMap::new();
 
         // How many tracks per seed?
         let mut tracks_per_seed = similarity_count;

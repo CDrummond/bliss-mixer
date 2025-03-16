@@ -38,7 +38,11 @@ pub fn init_weights(weights_str: &String) {
             }
             pos+=1;
         }
-        log::debug!("Weights: {:?}", WEIGHTS);
+        log::debug!("Weights: {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}", 
+            WEIGHTS[0], WEIGHTS[1], WEIGHTS[2], WEIGHTS[3], WEIGHTS[4],
+            WEIGHTS[5], WEIGHTS[6], WEIGHTS[7], WEIGHTS[8], WEIGHTS[9],
+            WEIGHTS[10], WEIGHTS[11], WEIGHTS[12], WEIGHTS[13], WEIGHTS[14],
+            WEIGHTS[15], WEIGHTS[16], WEIGHTS[17], WEIGHTS[18], WEIGHTS[19]);
     }
 }
 
@@ -119,10 +123,8 @@ impl Db {
                                 track.19];
                     num_loaded += 1;
                     let adjusted = adjust(vals);
-                    if let Err(e) = tree.tree.add(&adjusted, track.20) {
-                        log::debug!("Error adding track to tree: {}", e);
-                    }
                     forest.add(adjusted, track.20);
+                    tree.tree.add(&adjusted, track.20);
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
             }
@@ -183,9 +185,7 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    if let Err(e) = tree.tree.add(&adjust(vals), track.20) {
-                        log::debug!("Error adding track to tree: {}", e);
-                    }
+                    tree.tree.add(&adjust(vals), track.20);
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
             }
@@ -193,8 +193,8 @@ impl Db {
         }
     }
 
-    pub fn get_rowid(&self, path: &str) -> usize {
-        let mut id: usize = 0;
+    pub fn get_rowid(&self, path: &str) -> u64 {
+        let mut id: u64 = 0;
         if let Ok(mut stmt) = self.conn.prepare("SELECT rowid FROM Tracks WHERE File=:path;") {
             if let Ok(val) = stmt.query_row(&[(":path", &path)], |row| row.get(0)) {
                 id = val;
@@ -228,7 +228,7 @@ impl Db {
         all_available_genres
     }
 
-    pub fn get_metadata(&self, id: usize) -> Result<Metadata, rusqlite::Error> {
+    pub fn get_metadata(&self, id: u64) -> Result<Metadata, rusqlite::Error> {
         let mut stmt = self.conn.prepare("SELECT File, Title, Artist, AlbumArtist, Album, Genre, Duration, Tempo FROM Tracks WHERE rowid=:rowid;")?;
         let row = stmt.query_row(&[(":rowid", &id)], |row| {
                 Ok(Metadata {
@@ -245,7 +245,7 @@ impl Db {
         Ok(row)
     }
 
-    pub fn get_metrics(&self, id: usize) -> Result<[f32; tree::DIMENSIONS], rusqlite::Error> {
+    pub fn get_metrics(&self, id: u64) -> Result<[f32; tree::DIMENSIONS], rusqlite::Error> {
         let mut stmt = self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10 FROM Tracks WHERE rowid=:rowid;").unwrap();
         let row = stmt.query_row(&[(":rowid", &id)], |row| {
                 Ok((

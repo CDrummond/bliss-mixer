@@ -12,7 +12,7 @@ use noisy_float::prelude::*;
 
 #[derive(Clone)]
 pub struct Track {
-    pub id: usize,
+    pub id: u64,
     pub metrics: [f32; tree::DIMENSIONS]
 }
 
@@ -28,7 +28,7 @@ impl Forest {
         }
     }
 
-    pub fn add(&mut self, metrics: [f32; tree::DIMENSIONS], id: usize) {
+    pub fn add(&mut self, metrics: [f32; tree::DIMENSIONS], id: u64) {
         let track = Track {
             id: id,
             metrics: metrics,

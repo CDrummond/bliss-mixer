@@ -33,7 +33,7 @@ async fn send_port_to_lms(lms_server: &String, port: u16) {
             ]
         });
 
-        match client.post(format!("http://{}:9000/jsonrpc.js", lms_server)).send_json(&request).await {
+        match client.post(format!("http://{}/jsonrpc.js", lms_server)).send_json(&request).await {
             Ok(_) => {
                 log::debug!("LMS updated");
             }
@@ -69,7 +69,7 @@ async fn main() -> std::io::Result<()> {
         arg_parse.refer(&mut port).add_option(&["-p", "--port"], Store, &port_help);
         arg_parse.refer(&mut address).add_option(&["-a", "--address"], Store, &address_help);
         arg_parse.refer(&mut logging).add_option(&["-l", "--logging"], Store, "Log level (trace, debug, info, warn, error)");
-        arg_parse.refer(&mut lms_server).add_option(&["-L", "--lms"], Store, "LMS server (hostname or IP address)");
+        arg_parse.refer(&mut lms_server).add_option(&["-L", "--lms"], Store, "LMS server (hostname:port, or IP address:port)");
         arg_parse.refer(&mut allow_db_upload).add_option(&["-u", "--upload"], StoreTrue, "Allow uploading of database");
         arg_parse.refer(&mut weights).add_option(&["-w", "--weights"], Store, &weights_help);
         arg_parse.parse_args_or_exit();

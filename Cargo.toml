@@ -11,16 +11,15 @@ readme = "README.md"
 
 [dependencies]
 argparse = "0.2.2"
-rusqlite = { version = "0.25.0", features = ["bundled"] }
+rusqlite = { version = "0.34.0", features = ["bundled"] }
 log = "0.4.14"
-env_logger = "0.8.4"
+env_logger = "0.11.7"
 actix-web = "3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.59"
-kiddo = "0.2.3"
-chrono = "0.4.19"
-rand = "0.8.4"
-globset = "0.4.9"
+kiddo = "5.0.3"
+chrono = "0.4.40"
+rand = "0.8.5"
+globset = "0.4.16"
 extended-isolation-forest = { version = "0.2.3", default-features = false }
 noisy_float = "0.2.0"
-
