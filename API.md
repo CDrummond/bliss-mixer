@@ -130,3 +130,13 @@ Example response:
 ArtistZ/AlbumY/Track5.ogg
 ArtistW/AlbumG/Track9.ogg
 ```
+
+## Hints for use
+
+Being deterministic in nature, the same input will produce the same output. To add some level of randomization:
+
+* use the `shuffle` parameter in the mix API
+* always randomize the seed from the current queue (e.g. use the last 10 tracks in the queue, randomize them and take the last 5)
+* experiment with different values of `maxbpmdiff`
+* always fill the `previous` parameter in the mix API to avoid duplicates in your queue
+* (usually) the larger the library, the better the results
