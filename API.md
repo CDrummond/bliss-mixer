@@ -60,7 +60,7 @@ Example request:
 
 Send via CURL:
 ```bash
-curl 'http://localhost:12000/api/list' --compressed -X POST -H 'Content-Type: application/json' --data-raw '{"count":5,"filtergenre":1,"filterxmas":1,"min":60,"max":300,"maxbpmdiff":0,"tracks":["ArtistA/Album/Track1.ogg","ArtistB/Album/Track1.ogg"],"previous":["ArtistA/Album/Track2.ogg","ArtistC/Album/Track2.ogg"],"shuffle":1,"norepart":10,"norepalb":10,"genregroups":[["Rock","Metal"],["Dance","R&B","Pop"]],"forest":1}'
+curl 'http://localhost:12000/api/mix' --compressed -X POST -H 'Content-Type: application/json' --data-raw '{"count":5,"filtergenre":1,"filterxmas":1,"min":60,"max":300,"maxbpmdiff":0,"tracks":["ArtistA/Album/Track1.ogg","ArtistB/Album/Track1.ogg"],"previous":["ArtistA/Album/Track2.ogg","ArtistC/Album/Track2.ogg"],"shuffle":1,"norepart":10,"norepalb":10,"genregroups":[["Rock","Metal"],["Dance","R&B","Pop"]],"forest":1}'
 ```
 
 
