@@ -36,7 +36,7 @@ impl Forest {
         self.all_tracks.push(track);
     }
 
-    pub fn sort_by_closest(&self, seeds: &Vec<Track>) -> Vec<Track>{
+    pub fn sort_by_closest(&self, seeds: &Vec<Track>) -> Vec<Track> {
        let opts = extended_isolation_forest::ForestOptions {
             n_trees: 200,
             sample_size: seeds.len().min(256),
