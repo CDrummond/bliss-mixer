@@ -16,6 +16,7 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
+use std::num::NonZero;
 
 const CHRISTMAS: &str = "christmas";
 const VARIOUS: &str = "various";
@@ -437,7 +438,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
             let mut accepted_for_seed = 0;
             if let Ok(metrics) = db.get_metrics(seed.id) {
                 log::debug!("Looking for tracks similar to '{}'", seed.file);
-                let sim_tracks = tree.get_similars(&metrics, num_sim);
+                let sim_tracks = tree.get_similars(&metrics, NonZero::new(num_sim).unwrap());
                 for sim_track in sim_tracks {
                     if filter_out_ids.contains(&sim_track.id) {
                         // Seen from previous seed, so set similarity to lowest value
@@ -636,12 +637,12 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
             let mut sim_tracks: Vec<tree::Sim> = Vec::new();
 
             if byartist == 1 {
-                let mut tree = tree::Tree::new();
-                db.load_artist_tree(&mut tree, &seed.orig_artist);
-                sim_tracks.extend(tree.get_similars(&metrics, MIN_NUM_SIM));
+                let vals = db.load_artist_tree(&seed.orig_artist);
+                let tree = tree::Tree::new(&vals);
+                sim_tracks.extend(tree.get_similars(&metrics, NonZero::new(MIN_NUM_SIM).unwrap()));
             } else {
                 let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
-                sim_tracks.extend(tree.get_similars(&metrics, MIN_NUM_SIM));
+                sim_tracks.extend(tree.get_similars(&metrics, NonZero::new(MIN_NUM_SIM).unwrap()));
             }
 
             for sim_track in sim_tracks {

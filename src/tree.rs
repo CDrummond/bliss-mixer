@@ -6,13 +6,14 @@
  *
  **/
 
-use kiddo::{KdTree, SquaredEuclidean};
+use kiddo::{ImmutableKdTree, SquaredEuclidean};
+use std::num::NonZero;
 
 pub const DIMENSIONS: usize = 20;
 
 #[derive(Clone)]
 pub struct Tree {
-    pub tree: KdTree<f32, DIMENSIONS>,
+    pub tree: ImmutableKdTree<f32, DIMENSIONS>,
 }
 
 pub struct Sim {
@@ -21,13 +22,13 @@ pub struct Sim {
 }
 
 impl Tree {
-    pub fn new() -> Self {
+    pub fn new(vals: &Vec<[f32; DIMENSIONS]>) -> Self {
         Self {
-            tree: KdTree::new(),
+            tree: ImmutableKdTree::new_from_slice(&vals)
         }
     }
 
-    pub fn get_similars(&self, seed: &[f32; DIMENSIONS], count: usize) -> Vec<Sim> {
+    pub fn get_similars(&self, seed: &[f32; DIMENSIONS], count: NonZero<usize>) -> Vec<Sim> {
         let mut resp = Vec::<Sim>::new();
 
         let neighbours =  self.tree.nearest_n::<SquaredEuclidean>(seed, count);
