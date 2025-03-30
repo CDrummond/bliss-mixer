@@ -1,6 +1,7 @@
 0.4.0
 -----
 1. Use immutable KD-tree.
+2. Remove extended isolation forest, too slow!
 
 0.3.0
 -----

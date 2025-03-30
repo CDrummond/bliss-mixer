@@ -6,7 +6,6 @@
  *
  **/
 
-use crate::forest;
 use crate::tree;
 use rusqlite::Connection;
 use std::collections::HashSet;
@@ -69,10 +68,10 @@ impl Db {
         }
     }
 
-    pub fn load(&self, forest: &mut forest::Forest) -> Vec<[f32; tree::DIMENSIONS]> {
-        log::debug!("Load tree/forest");
+    pub fn load(&self) -> Vec<[f32; tree::DIMENSIONS]> {
+        log::debug!("Load tree");
         let mut data: Vec<[f32; tree::DIMENSIONS]> = Vec::new();
-        match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, rowid FROM Tracks WHERE Ignore IS NOT 1") {
+        match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10 FROM Tracks WHERE Ignore IS NOT 1") {
             Ok(mut stmt) => {
                 let track_iter = stmt.query_map([], |row| {
                     Ok((row.get(0)?,
@@ -94,8 +93,7 @@ impl Db {
                         row.get(16)?,
                         row.get(17)?,
                         row.get(18)?,
-                        row.get(19)?,
-                        row.get(20)?
+                        row.get(19)?
                     ))
                 }).unwrap();
                 let mut num_loaded = 0;
@@ -123,9 +121,7 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    let adjusted = adjust(vals);
-                    forest.add(adjusted, track.20);
-                    data.push(adjusted);
+                    data.push(adjust(vals));
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
             }
