@@ -6,6 +6,7 @@
  *
  **/
 
+use crate::db;
 use kiddo::{ImmutableKdTree, SquaredEuclidean};
 use std::num::NonZero;
 
@@ -14,6 +15,7 @@ pub const DIMENSIONS: usize = 20;
 #[derive(Clone)]
 pub struct Tree {
     pub tree: ImmutableKdTree<f32, DIMENSIONS>,
+    idmap: Vec<u64> // List of rowids
 }
 
 pub struct Sim {
@@ -22,24 +24,24 @@ pub struct Sim {
 }
 
 impl Tree {
-    pub fn new(vals: &Vec<[f32; DIMENSIONS]>) -> Self {
+    pub fn new(details: &db::AnalysisDetails) -> Self {
         Self {
-            tree: ImmutableKdTree::new_from_slice(&vals)
+            tree: ImmutableKdTree::new_from_slice(&details.values),
+            idmap: details.ids.clone()
         }
     }
 
     pub fn get_similars(&self, seed: &[f32; DIMENSIONS], count: NonZero<usize>) -> Vec<Sim> {
         let mut resp = Vec::<Sim>::new();
 
-        let neighbours =  self.tree.nearest_n::<SquaredEuclidean>(seed, count);
+        let neighbours = self.tree.nearest_n::<SquaredEuclidean>(seed, count);
         for neighbour in &neighbours {
             let item = Sim {
-                id:  neighbour.item,
+                id:  self.idmap[neighbour.item as usize],
                 sim: neighbour.distance,
             };
             resp.push(item);
         }
-
         resp
     }
 }

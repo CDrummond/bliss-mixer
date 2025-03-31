@@ -2,6 +2,7 @@
 -----
 1. Use immutable KD-tree.
 2. Remove extended isolation forest, too slow!
+3. Store list of rowids, as these can be non-contiguous!
 
 0.3.0
 -----

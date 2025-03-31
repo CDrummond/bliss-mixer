@@ -27,6 +27,20 @@ pub struct Db {
     pub conn: Connection,
 }
 
+pub struct AnalysisDetails {
+    pub values: Vec<[f32; tree::DIMENSIONS]>,
+    pub ids: Vec<u64>
+}
+
+impl AnalysisDetails {
+    pub fn new() -> Self {
+        Self {
+            analysis: Vec::new(),
+            ids: Vec::new()
+        }
+    }
+}
+
 pub fn init_weights(weights_str: &String) {
     let vals = weights_str.split(",");
     let mut pos = 0;
@@ -68,10 +82,10 @@ impl Db {
         }
     }
 
-    pub fn load(&self) -> Vec<[f32; tree::DIMENSIONS]> {
+    pub fn load(&self) -> AnalysisDetails {
         log::debug!("Load tree");
-        let mut data: Vec<[f32; tree::DIMENSIONS]> = Vec::new();
-        match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10 FROM Tracks WHERE Ignore IS NOT 1") {
+        let mut details = AnalysisDetails::new();
+        match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, rowid FROM Tracks WHERE Ignore IS NOT 1") {
             Ok(mut stmt) => {
                 let track_iter = stmt.query_map([], |row| {
                     Ok((row.get(0)?,
@@ -93,7 +107,8 @@ impl Db {
                         row.get(16)?,
                         row.get(17)?,
                         row.get(18)?,
-                        row.get(19)?
+                        row.get(19)?,
+                        row.get(20)?
                     ))
                 }).unwrap();
                 let mut num_loaded = 0;
@@ -121,19 +136,20 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    data.push(adjust(vals));
+                    details.values.push(adjust(vals));
+                    details.ids.push(track.20);
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
             }
             Err(e) => { log::error!("Failed to load tree from DB. {}", e); }
         }
-        data
+        details
     }
 
-    pub fn load_artist_tree(&self, artist: &str) -> Vec<[f32; tree::DIMENSIONS]> {
+    pub fn load_artist_tree(&self, artist: &str) -> AnalysisDetails {
         log::debug!("Load artist '{}' tree", artist);
-        let mut data: Vec<[f32; tree::DIMENSIONS]> = Vec::new();
-        match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10 FROM Tracks WHERE Artist=:artist;") {
+        let mut details = AnalysisDetails::new();
+        match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, rowid FROM Tracks WHERE Artist=:artist;") {
             Ok(mut stmt) => {
                 let track_iter = stmt.query_map(&[(":artist", &artist)], |row| {
                     Ok((row.get(0)?,
@@ -155,7 +171,8 @@ impl Db {
                         row.get(16)?,
                         row.get(17)?,
                         row.get(18)?,
-                        row.get(19)?
+                        row.get(19)?,
+                        row.get(20)?
                     ))
                 }).unwrap();
                 let mut num_loaded = 0;
@@ -183,13 +200,14 @@ impl Db {
                                 track.18,
                                 track.19];
                     num_loaded += 1;
-                    data.push(adjust(vals));
+                    details.values.push(adjust(vals));
+                    details.ids.push(track.20);
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
             }
             Err(e) => { log::error!("Failed to load tree from DB. {}", e); }
         }
-        data
+        details
     }
 
     pub fn get_rowid(&self, path: &str) -> u64 {
