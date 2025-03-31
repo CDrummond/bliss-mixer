@@ -27,20 +27,6 @@ pub struct Db {
     pub conn: Connection,
 }
 
-pub struct AnalysisDetails {
-    pub values: Vec<[f32; tree::DIMENSIONS]>,
-    pub ids: Vec<u64>
-}
-
-impl AnalysisDetails {
-    pub fn new() -> Self {
-        Self {
-            analysis: Vec::new(),
-            ids: Vec::new()
-        }
-    }
-}
-
 pub fn init_weights(weights_str: &String) {
     let vals = weights_str.split(",");
     let mut pos = 0;
@@ -82,9 +68,9 @@ impl Db {
         }
     }
 
-    pub fn load(&self) -> AnalysisDetails {
+    pub fn load(&self) -> tree::AnalysisDetails {
         log::debug!("Load tree");
-        let mut details = AnalysisDetails::new();
+        let mut details = tree::AnalysisDetails::new();
         match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, rowid FROM Tracks WHERE Ignore IS NOT 1") {
             Ok(mut stmt) => {
                 let track_iter = stmt.query_map([], |row| {
@@ -146,9 +132,9 @@ impl Db {
         details
     }
 
-    pub fn load_artist_tree(&self, artist: &str) -> AnalysisDetails {
+    pub fn load_artist_tree(&self, artist: &str) -> tree::AnalysisDetails {
         log::debug!("Load artist '{}' tree", artist);
-        let mut details = AnalysisDetails::new();
+        let mut details = tree::AnalysisDetails::new();
         match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, rowid FROM Tracks WHERE Artist=:artist;") {
             Ok(mut stmt) => {
                 let track_iter = stmt.query_map(&[(":artist", &artist)], |row| {

@@ -6,7 +6,6 @@
  *
  **/
 
-use crate::db;
 use kiddo::{ImmutableKdTree, SquaredEuclidean};
 use std::num::NonZero;
 
@@ -18,13 +17,27 @@ pub struct Tree {
     idmap: Vec<u64> // List of rowids
 }
 
+pub struct AnalysisDetails {
+    pub values: Vec<[f32; DIMENSIONS]>,
+    pub ids: Vec<u64>
+}
+
+impl AnalysisDetails {
+    pub fn new() -> Self {
+        Self {
+            values: Vec::new(),
+            ids: Vec::new()
+        }
+    }
+}
+
 pub struct Sim {
     pub id: u64,
     pub sim: f32,
 }
 
 impl Tree {
-    pub fn new(details: &db::AnalysisDetails) -> Self {
+    pub fn new(details: &AnalysisDetails) -> Self {
         Self {
             tree: ImmutableKdTree::new_from_slice(&details.values),
             idmap: details.ids.clone()

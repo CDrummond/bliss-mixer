@@ -123,16 +123,16 @@ async fn main() -> std::io::Result<()> {
             db::init_weights(&weights);
         }
         let mut all_db_genres = HashSet::new();
-        let mut db_details = db::AnalysisDetails::new();
+        let mut tree_details = tree::AnalysisDetails::new();
         if path.exists() {
             let db = db::Db::new(&db_path);
-            db_details = db.load();
+            tree_details = db.load();
             for genre in db.get_all_genres() {
                 all_db_genres.insert(genre.to_lowercase());
             }
             db.close();
         }
-        let tree = tree::Tree::new(&db_details);
+        let tree = tree::Tree::new(&tree_details);
 
         let server = HttpServer::new(move || {
             App::new()
