@@ -13,6 +13,7 @@ use std::path::Path;
 use std::process;
 mod api;
 mod db;
+mod forest;
 mod tree;
 mod upload;
 
