@@ -47,6 +47,7 @@ pub struct MixParams {
 pub struct ListParams {
     count: Option<u16>,
     filtergenre: Option<u16>,
+    filterxmas: Option<u16>,
     min: Option<u32>,
     max: Option<u32>,
     maxbpmdiff: Option<i16>,
@@ -517,6 +518,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
     let db = db::Db::new(db_path);
     let mut count = payload.count.unwrap_or(5) as usize;
     let filtergenre = payload.filtergenre.unwrap_or(0);
+    let mut filterxmas = payload.filterxmas.unwrap_or(0);
     let min = payload.min.unwrap_or(0);
     let max = payload.max.unwrap_or(0);
     let maxbpmdiff = payload.maxbpmdiff.unwrap_or(0);
@@ -527,6 +529,10 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
     let mut all_genres_from_groups: HashSet<String> = HashSet::new();
     let mut chosen: Vec<String> = Vec::new();
     let mut filter_out_titles: HashSet<String> = HashSet::new();
+
+    if filterxmas == 1 && chrono::Local::now().month() == 12 {
+         filterxmas = 0;
+     }
 
     if count < MIN_COUNT {
         count = MIN_COUNT;
@@ -578,6 +584,10 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
                 }
                 if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
                     log("DISCARD(genre)", &trk);
+                    continue;
+                }
+                if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
+                    log("DISCARD(christmas)", &trk);
                     continue;
                 }
                 chosen.push(trk.file);
