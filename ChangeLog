@@ -1,3 +1,8 @@
+0.4.2
+-----
+1. Add 'exclude christmas' support to list API - thanks to
+   VictorvandenHoven
+
 0.4.1
 -----
 1. Strip symbols from release binaries.
