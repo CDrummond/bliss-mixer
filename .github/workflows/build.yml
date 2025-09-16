@@ -104,5 +104,5 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: bliss-mixer.exe
+        name: bliss-mixer-windows
         path: target/release/bliss-mixer.exe
