@@ -1,32 +1,26 @@
-# Cross compilation environment for bliss-mixer
+#!/bin/bash
+## #!/usr/bin/env bash
+set -eux
 
-FROM debian:buster
+uname -a
+DESTDIR=/src/releases
 
-RUN dpkg --add-architecture arm64 && \
-    dpkg --add-architecture armhf && \
-    dpkg --add-architecture i686 && \
-    dpkg --add-architecture amd64
-RUN apt-get update
+mkdir -p $DESTDIR/bin
+rm -rf $DESTDIR/bin/*
 
-RUN apt-get install -y curl git build-essential gcc-multilib musl-tools musl-dev musl && \
-    apt-get install -y crossbuild-essential-armhf crossbuild-essential-arm64
+function build {
+        echo Building for $1 to $3...
 
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-ENV PATH="/root/.cargo/bin/:${PATH}"
-RUN rustup target add x86_64-unknown-linux-musl && \
-    rustup target add i686-unknown-linux-musl && \
-    rustup target add aarch64-unknown-linux-gnu && \
-    rustup target add arm-unknown-linux-gnueabihf
+        if [[ ! -f /build/$1/release/bliss-mixer ]]; then
+                export RUST_BACKTRACE=full
+                export PKG_CONFIG=${1//unknown-/}-pkg-config
+                BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/${1//unknown-/}" cargo build --release --features=symphonia --target $1
+        fi
 
-RUN mkdir /.cargo && \
-    echo '[target.aarch64-unknown-linux-gnu]\nlinker = "aarch64-linux-gnu-gcc"' > /.cargo/config && \
-    echo '[target.arm-unknown-linux-gnueabihf]\nlinker = "arm-linux-gnueabihf-gcc"' >> /.cargo/config
+        $2 /build/$1/release/bliss-mixer && cp /build/$1/release/bliss-mixer $DESTDIR/$3
+}
 
-RUN mkdir /build
-ENV CARGO_TARGET_DIR /build
-ENV CARGO_HOME /build/cache
+build arm-unknown-linux-gnueabihf arm-linux-gnueabihf-strip bin/bliss-mixer-armhf
+build aarch64-unknown-linux-gnu aarch64-linux-gnu-strip bin/bliss-mixer-aarch64
 
-RUN mkdir /src
-
-WORKDIR /src
-CMD ["/src/docker/docker-build.sh"]
+cp scripts/bliss-mixer-arm $DESTDIR/bliss-mixer

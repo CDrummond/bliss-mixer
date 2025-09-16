@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+ARCH=`arch`
+SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]:-$0}"; )" &> /dev/null && pwd 2> /dev/null; )";
+
+if [ "$ARCH" = "aarch64" ] ; then
+    $SCRIPT_DIR/bin/bliss-mixer-aarch64 $*
+else
+    $SCRIPT_DIR/bin/bliss-mixer-armhf $*
+fi

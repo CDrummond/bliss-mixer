@@ -5,22 +5,22 @@ set -eux
 uname -a
 DESTDIR=/src/releases
 
-for d in armhf-linux aarch64-linux x86_64-linux ; do
-    mkdir -p $DESTDIR/$d
-    rm -f $DESTDIR/$d/*
-done
+mkdir -p $DESTDIR/bin
+rm -rf $DESTDIR/bin/*
 
 function build {
-	echo Building for $1 to $3...
+        echo Building for $1 to $3...
 
-	if [[ ! -f /build/$1/release/bliss-mixer ]]; then
-		cargo build --release --target $1
-	fi
+        if [[ ! -f /build/$1/release/bliss-mixer ]]; then
+                export RUST_BACKTRACE=full
+                export PKG_CONFIG=${1//unknown-/}-pkg-config
+                BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/${1//unknown-/}" cargo build --release --features=symphonia --target $1
+        fi
 
-	$2 /build/$1/release/bliss-mixer && cp /build/$1/release/bliss-mixer $DESTDIR/$3
+        $2 /build/$1/release/bliss-mixer && cp /build/$1/release/bliss-mixer $DESTDIR/$3
 }
 
-build arm-unknown-linux-gnueabihf arm-linux-gnueabihf-strip armhf-linux/bliss-mixer
-build aarch64-unknown-linux-gnu aarch64-linux-gnu-strip aarch64-linux/bliss-mixer
-build x86_64-unknown-linux-musl strip x86_64-linux/bliss-mixer
+build arm-unknown-linux-gnueabihf arm-linux-gnueabihf-strip bin/bliss-mixer-armhf
+build aarch64-unknown-linux-gnu aarch64-linux-gnu-strip bin/bliss-mixer-aarch64
 
+cp scripts/bliss-mixer-arm $DESTDIR/bliss-mixer
