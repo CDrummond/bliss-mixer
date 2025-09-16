@@ -14,7 +14,7 @@ function build {
         if [[ ! -f /build/$1/release/bliss-mixer ]]; then
                 export RUST_BACKTRACE=full
                 export PKG_CONFIG=${1//unknown-/}-pkg-config
-                BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/${1//unknown-/}" cargo build --release --features=symphonia --target $1
+                BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/${1//unknown-/}" cargo build --release --target $1
         fi
 
         $2 /build/$1/release/bliss-mixer && cp /build/$1/release/bliss-mixer $DESTDIR/$3
