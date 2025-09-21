@@ -99,7 +99,9 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Build
-      run: cargo build --release
+      run: |
+        cargo build --release
+        strip target/release/bliss-mixer.exe
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
