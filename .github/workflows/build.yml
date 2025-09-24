@@ -25,7 +25,7 @@ jobs:
         name: bliss-mixer-linux-x86
         path: releases/
 
-  Linux_x86:
+  Linux_arm:
     runs-on: ubuntu-latest
 
     steps:
