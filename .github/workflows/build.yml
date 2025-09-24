@@ -12,17 +12,12 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v1
 
-    - name: Packages
-      run: sudo apt-get update && sudo apt-get install build-essential yasm -y
-
-    - name: Build
+    - name: Build x86
       run: |
-        cargo build --release
-        strip target/release/bliss-mixer
-        mkdir releases
-        cp target/release/bliss-mixer releases/bliss-mixer
+        docker build -t bliss-mixer-x86 - < docker/Dockerfile_x86
+        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-mixer
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
@@ -30,17 +25,17 @@ jobs:
         name: bliss-mixer-linux-x86
         path: releases/
 
-  Linux_arm:
+  Linux_x86:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v1
 
-    - name: Build
+    - name: Build ARM
       run: |
-        docker build --pull --no-cache -t bliss-mixer-cross - < docker/Dockerfile_Bullseye
-        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-mixer-cross
+        docker build -t bliss-mixer-arm - < docker/Dockerfile_arm
+        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-mixer
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
