@@ -1,7 +1,7 @@
-FROM debian:bullseye
+FROM debian:bookworm
 
 RUN dpkg --add-architecture arm64 && \
-    dpkg --add-architecture armhf &&
+    dpkg --add-architecture armhf
 RUN apt-get update
 
 RUN apt-get install -y curl git build-essential gcc-multilib musl-tools musl-dev musl && \

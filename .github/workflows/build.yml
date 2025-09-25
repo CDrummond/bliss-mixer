@@ -17,7 +17,7 @@ jobs:
     - name: Build x86
       run: |
         docker build -t bliss-mixer-x86 - < docker/Dockerfile_x86
-        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-mixer
+        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-mixer-x86
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
@@ -35,7 +35,7 @@ jobs:
     - name: Build ARM
       run: |
         docker build -t bliss-mixer-arm - < docker/Dockerfile_arm
-        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-mixer
+        docker run --rm -v $PWD/target:/build -v $PWD:/src bliss-mixer-arm
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
