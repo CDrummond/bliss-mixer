@@ -1,0 +1,19 @@
+FROM debian:bookworm
+
+RUN dpkg --add-architecture amd64
+RUN apt-get update
+
+RUN apt-get install -y curl git build-essential gcc-multilib musl-tools musl-dev musl
+
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH="/root/.cargo/bin/:${PATH}"
+RUN rustup target add x86_64-unknown-linux-musl
+
+RUN mkdir /build
+ENV CARGO_TARGET_DIR /build
+ENV CARGO_HOME /build/cache
+
+RUN mkdir /src
+
+WORKDIR /src
+CMD ["/src/docker/docker-build-x86.sh"]

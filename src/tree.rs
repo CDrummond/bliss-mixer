@@ -9,7 +9,7 @@
 use kiddo::{ImmutableKdTree, SquaredEuclidean};
 use std::num::NonZero;
 
-pub const DIMENSIONS: usize = 20;
+pub const DIMENSIONS: usize = 23;
 
 #[derive(Clone)]
 pub struct Tree {

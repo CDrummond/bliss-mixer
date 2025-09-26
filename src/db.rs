@@ -37,11 +37,12 @@ pub fn init_weights(weights_str: &String) {
             }
             pos+=1;
         }
-        log::debug!("Weights: {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}", 
+        log::debug!("Weights: {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}", 
             WEIGHTS[0], WEIGHTS[1], WEIGHTS[2], WEIGHTS[3], WEIGHTS[4],
             WEIGHTS[5], WEIGHTS[6], WEIGHTS[7], WEIGHTS[8], WEIGHTS[9],
             WEIGHTS[10], WEIGHTS[11], WEIGHTS[12], WEIGHTS[13], WEIGHTS[14],
-            WEIGHTS[15], WEIGHTS[16], WEIGHTS[17], WEIGHTS[18], WEIGHTS[19]);
+            WEIGHTS[15], WEIGHTS[16], WEIGHTS[17], WEIGHTS[18], WEIGHTS[19],
+            WEIGHTS[20], WEIGHTS[21], WEIGHTS[22]);
     }
 }
 
@@ -71,7 +72,7 @@ impl Db {
     pub fn load(&self) -> tree::AnalysisDetails {
         log::debug!("Load tree");
         let mut details = tree::AnalysisDetails::new();
-        match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, rowid FROM Tracks WHERE Ignore IS NOT 1") {
+        match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, Chroma11, Chroma12, Chroma13, rowid FROM TracksV2 WHERE Ignore IS NOT 1") {
             Ok(mut stmt) => {
                 let track_iter = stmt.query_map([], |row| {
                     Ok((row.get(0)?,
@@ -94,7 +95,10 @@ impl Db {
                         row.get(17)?,
                         row.get(18)?,
                         row.get(19)?,
-                        row.get(20)?
+                        row.get(20)?,
+                        row.get(21)?,
+                        row.get(22)?,
+                        row.get(23)?
                     ))
                 }).unwrap();
                 let mut num_loaded = 0;
@@ -120,10 +124,13 @@ impl Db {
                                 track.16,
                                 track.17,
                                 track.18,
-                                track.19];
+                                track.19,
+                                track.20,
+                                track.21,
+                                track.22];
                     num_loaded += 1;
                     details.values.push(adjust(vals));
-                    details.ids.push(track.20);
+                    details.ids.push(track.23);
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
             }
@@ -135,7 +142,7 @@ impl Db {
     pub fn load_artist_tree(&self, artist: &str) -> tree::AnalysisDetails {
         log::debug!("Load artist '{}' tree", artist);
         let mut details = tree::AnalysisDetails::new();
-        match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, rowid FROM Tracks WHERE Artist=:artist;") {
+        match self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, Chroma11, Chroma12, Chroma13, rowid FROM TracksV2 WHERE Artist=:artist;") {
             Ok(mut stmt) => {
                 let track_iter = stmt.query_map(&[(":artist", &artist)], |row| {
                     Ok((row.get(0)?,
@@ -158,7 +165,10 @@ impl Db {
                         row.get(17)?,
                         row.get(18)?,
                         row.get(19)?,
-                        row.get(20)?
+                        row.get(20)?,
+                        row.get(21)?,
+                        row.get(22)?,
+                        row.get(23)?
                     ))
                 }).unwrap();
                 let mut num_loaded = 0;
@@ -184,10 +194,13 @@ impl Db {
                                 track.16,
                                 track.17,
                                 track.18,
-                                track.19];
+                                track.19,
+                                track.20,
+                                track.21,
+                                track.22];
                     num_loaded += 1;
                     details.values.push(adjust(vals));
-                    details.ids.push(track.20);
+                    details.ids.push(track.23);
                 }
                 log::debug!("Tree loaded {} track(s)", num_loaded);
             }
@@ -198,7 +211,7 @@ impl Db {
 
     pub fn get_rowid(&self, path: &str) -> u64 {
         let mut id: u64 = 0;
-        if let Ok(mut stmt) = self.conn.prepare("SELECT rowid FROM Tracks WHERE File=:path;") {
+        if let Ok(mut stmt) = self.conn.prepare("SELECT rowid FROM TracksV2 WHERE File=:path;") {
             if let Ok(val) = stmt.query_row(&[(":path", &path)], |row| row.get(0)) {
                 id = val;
             }
@@ -210,7 +223,7 @@ impl Db {
         log::debug!("getting genres from db.");
         let mut all_available_genres = HashSet::new();
 
-        match self.conn.prepare("SELECT DISTINCT Genre FROM Tracks WHERE ignore IS NOT 1;") {
+        match self.conn.prepare("SELECT DISTINCT Genre FROM TracksV2 WHERE ignore IS NOT 1;") {
             Ok(mut stmt) => match stmt.query_map([], |row| Ok(row.get::<_, Option<String>>(0)?)) {
                 Ok(column) => {
                     for item in column {
@@ -232,7 +245,7 @@ impl Db {
     }
 
     pub fn get_metadata(&self, id: u64) -> Result<Metadata, rusqlite::Error> {
-        let mut stmt = self.conn.prepare("SELECT File, Title, Artist, AlbumArtist, Album, Genre, Duration, Tempo FROM Tracks WHERE rowid=:rowid;")?;
+        let mut stmt = self.conn.prepare("SELECT File, Title, Artist, AlbumArtist, Album, Genre, Duration, Tempo FROM TracksV2 WHERE rowid=:rowid;")?;
         let row = stmt.query_row(&[(":rowid", &id)], |row| {
                 Ok(Metadata {
                     file: row.get(0)?,
@@ -249,7 +262,7 @@ impl Db {
     }
 
     pub fn get_metrics(&self, id: u64) -> Result<[f32; tree::DIMENSIONS], rusqlite::Error> {
-        let mut stmt = self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10 FROM Tracks WHERE rowid=:rowid;").unwrap();
+        let mut stmt = self.conn.prepare("SELECT Tempo, Zcr, MeanSpectralCentroid, StdDevSpectralCentroid, MeanSpectralRolloff, StdDevSpectralRolloff, MeanSpectralFlatness, StdDevSpectralFlatness, MeanLoudness, StdDevLoudness, Chroma1, Chroma2, Chroma3, Chroma4, Chroma5, Chroma6, Chroma7, Chroma8, Chroma9, Chroma10, Chroma11, Chroma12, Chroma13 FROM TracksV2 WHERE rowid=:rowid;").unwrap();
         let row = stmt.query_row(&[(":rowid", &id)], |row| {
                 Ok((
                     row.get(0)?,
@@ -272,11 +285,14 @@ impl Db {
                     row.get(17)?,
                     row.get(18)?,
                     row.get(19)?,
+                    row.get(20)?,
+                    row.get(21)?,
+                    row.get(22)?,
                 ))
             }).unwrap();
         let metrics: [f32; tree::DIMENSIONS] = [
             row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10, row.11,
-            row.12, row.13, row.14, row.15, row.16, row.17, row.18, row.19,
+            row.12, row.13, row.14, row.15, row.16, row.17, row.18, row.19, row.20, row.21, row.22
         ];
         Ok(adjust(metrics))
     }
