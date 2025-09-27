@@ -341,7 +341,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     }
 
     let mut fseeds: Vec<forest::Track> = Vec::new();
-    if useforest>0 && seeds.len()>MIN_FOR_FOREST {
+    if useforest>0 && seeds.len()>=MIN_FOR_FOREST {
         for seed in seeds.clone() {
             if let Ok(metrics) = db.get_metrics(seed.id) {
                 let track = forest::Track {
@@ -353,7 +353,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         }
     }
 
-    if fseeds.len()>MIN_FOR_FOREST {
+    if fseeds.len()>=MIN_FOR_FOREST {
         log::debug!("Using extended isolation forest algorithm");
         let mut forest:tree::AnalysisDetails = tree::AnalysisDetails::new();
         let mut forest_ids: HashSet<u64> = HashSet::new();

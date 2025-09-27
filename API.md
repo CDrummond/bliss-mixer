@@ -19,7 +19,7 @@ response is a new-line separated list of tracks.
 | tracks      | Array of strings          | Seed tracks used for mix.                                     | _(mandatory)_   |
 | previous    | Array of strings          | Current tracks in queue, used to prevent repeats, etc.        | `[]`            |
 | shuffle     | Bool (1/0)                | Shuffle list of similar tracks.                               | `0`             |
-| forest      | Bool (1/0)                | Use `extended isolation forest` when more than 4 seed tracks. | `0`             |
+| forest      | Bool (1/0)                | Use `extended isolation forest` when 4 (or more) seed tracks. | `0`             |
 | norepart    | Int                       | Don't repeat an artist for N tracks.                          | `0`             |
 | norepalb    | Int                       | Don't repeat an album for N tracks.                           | `0`             |
 | genregroups | Array of array of strings | List of genre groups, used when filering on genre.            | _(mandatory)_   |
