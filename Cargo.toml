@@ -1,6 +1,6 @@
 [package]
 name = "bliss-mixer"
-version = "0.6.0"
+version = "0.6.1"
 authors = ["Craig Drummond <craig.p.drummond@gmail.com>"]
 edition = "2018"
 license = "GPL-3.0-only"
@@ -26,3 +26,5 @@ rand = "0.8.5"
 globset = "0.4.16"
 extended-isolation-forest = { version = "0.2.3", default-features = false }
 noisy_float = "0.2.0"
+rayon = "1.11.0"
+num_cpus = "1.13.0"

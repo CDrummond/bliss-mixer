@@ -1,7 +1,7 @@
 /**
  * BlissMixer: Use Bliss analysis results to create music mixes
  *
- * Copyright (c) 2022-2024 Craig Drummond <craig.p.drummond@gmail.com>
+ * Copyright (c) 2022-2025 Craig Drummond <craig.p.drummond@gmail.com>
  * GPLv3 license.
  *
  **/
@@ -9,11 +9,18 @@
 use crate::tree;
 use extended_isolation_forest;
 use noisy_float::prelude::*;
+use rayon::prelude::*; // Add rayon for parallelism
 
 #[derive(Clone)]
 pub struct Track {
     pub id: u64,
     pub metrics: [f32; tree::DIMENSIONS]
+}
+
+// Helper struct for sorting
+struct ScoredTrack {
+    score: N32,
+    track: Track,
 }
 
 pub fn sort_by_closest(details: &tree::AnalysisDetails, seeds: &Vec<Track>) -> Vec<Track> {
@@ -26,27 +33,29 @@ pub fn sort_by_closest(details: &tree::AnalysisDetails, seeds: &Vec<Track>) -> V
     let seed_array = &*seeds.iter().map(|s| s.metrics).collect::<Vec<_>>();
     let forest = extended_isolation_forest::Forest::from_slice(seed_array, &opts).unwrap();
 
-    let mut idx = 0;
-    let mut tracks: Vec<Track> = Vec::new();
-    for v in &details.values {
-        let track = Track {
+    // Prepare tracks
+    let tracks: Vec<Track> = details
+        .values
+        .iter()
+        .enumerate()
+        .map(|(idx, v)| Track {
             id: details.ids[idx],
             metrics: *v,
-        };
-        tracks.push(track);
-        idx+=1;
-    }
-    tracks.sort_by_cached_key(|track| n32(forest.score(&track.metrics) as f32));
-    /*
-    idx = 0;
-    for track in &tracks {
-        log::debug!("[{}] {} : {:.24}'", idx, track.id, n32(forest.score(&track.metrics) as f32));
-        if idx>20 {
-            break;
-        }
-        idx+=1;
-    }
-    */
-    tracks
+        })
+        .collect();
+
+    // Calculate scores in parallel
+    let mut scored_tracks: Vec<ScoredTrack> = tracks
+        .into_par_iter()
+        .map(|track| {
+            let score = n32(forest.score(&track.metrics) as f32);
+            ScoredTrack { score, track }
+        })
+        .collect();
+
+    // Sort by score
+    scored_tracks.par_sort_unstable_by_key(|scored| scored.score);
+
+    // Return tracks sorted by score
+    scored_tracks.into_iter().map(|scored| scored.track).collect()
 }
- 

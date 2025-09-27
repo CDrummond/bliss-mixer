@@ -1,3 +1,7 @@
+0.6.1
+-----
+1. Speed up extended isolation forest by calculating scores in parallel.
+
 0.6.0
 -----
 1. Re-add option to use extended isolation forest.

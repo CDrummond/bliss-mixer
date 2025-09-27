@@ -11,6 +11,7 @@ use argparse::{ArgumentParser, Store, StoreTrue};
 use std::collections::HashSet;
 use std::path::Path;
 use std::process;
+use rayon::ThreadPoolBuilder;
 mod api;
 mod db;
 mod forest;
@@ -134,6 +135,11 @@ async fn main() -> std::io::Result<()> {
             db.close();
         }
         let tree = tree::Tree::new(&tree_details);
+
+        let total_cpus:usize = num_cpus::get() as usize;
+        if total_cpus>1 {
+            ThreadPoolBuilder::new().num_threads(total_cpus - 1).build_global().unwrap();
+        }
 
         let server = HttpServer::new(move || {
             App::new()
