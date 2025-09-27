@@ -363,7 +363,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                 let sim_tracks = tree.get_similars(&metrics, NonZero::new(num_per_file).unwrap());
                 for sim_track in sim_tracks {
                     if !forest_ids.contains(&sim_track.id) {
-                        if let Ok(smetrics) = db.get_metrics(seed.id) {
+                        if let Ok(smetrics) = db.get_metrics(sim_track.id) {
                             forest.values.push(smetrics);
                             forest.ids.push(sim_track.id);
                             forest_ids.insert(sim_track.id);
