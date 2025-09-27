@@ -1,6 +1,7 @@
 0.6.0
 -----
 1. Re-add option to use extended isolation forest.
+2. Use bullseye for Linux builds.
 
 0.5.1
 -----
