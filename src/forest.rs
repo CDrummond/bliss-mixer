@@ -37,6 +37,16 @@ pub fn sort_by_closest(details: &tree::AnalysisDetails, seeds: &Vec<Track>) -> V
         idx+=1;
     }
     tracks.sort_by_cached_key(|track| n32(forest.score(&track.metrics) as f32));
+    /*
+    idx = 0;
+    for track in &tracks {
+        log::debug!("[{}] {} : {:.24}'", idx, track.id, n32(forest.score(&track.metrics) as f32));
+        if idx>20 {
+            break;
+        }
+        idx+=1;
+    }
+    */
     tracks
 }
  

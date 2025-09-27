@@ -356,7 +356,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         log::debug!("Using extended isolation forest algorithm");
         let mut forest:tree::AnalysisDetails = tree::AnalysisDetails::new();
         let mut forest_ids: HashSet<u64> = HashSet::new();
-        let num_per_file = ((10000/fseeds.len()) as usize).min(2000);
+        let num_per_file = ((10000/fseeds.len()) as usize).min(1000);
         for seed in seeds {
             if let Ok(metrics) = db.get_metrics(seed.id) {
                 log::debug!("Looking for {} tracks similar to '{}'", num_per_file, seed.file);
