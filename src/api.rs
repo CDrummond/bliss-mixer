@@ -354,7 +354,27 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 
     if fseeds.len()>1 {
         log::debug!("Using extended isolation forest algorithm");
-        for track in forest::sort_by_closest(&db.load(), &fseeds) {
+        let mut forest:tree::AnalysisDetails = tree::AnalysisDetails::new();
+        let mut forest_ids: HashSet<u64> = HashSet::new();
+        let num_per_file = ((10000/fseeds.len()) as usize).min(2000);
+        for seed in seeds {
+            if let Ok(metrics) = db.get_metrics(seed.id) {
+                log::debug!("Looking for {} tracks similar to '{}'", num_per_file, seed.file);
+                let sim_tracks = tree.get_similars(&metrics, NonZero::new(num_per_file).unwrap());
+                for sim_track in sim_tracks {
+                    if !forest_ids.contains(&sim_track.id) {
+                        if let Ok(smetrics) = db.get_metrics(seed.id) {
+                            forest.values.push(smetrics);
+                            forest.ids.push(sim_track.id);
+                            forest_ids.insert(sim_track.id);
+                        }
+                    }
+                }
+            }
+        }
+
+        log::debug!("Forest size: {}", forest.values.len());
+        for track in forest::sort_by_closest(&forest, &fseeds) {
             if filter_out_ids.contains(&track.id) {
                 continue;
             }

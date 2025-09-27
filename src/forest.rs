@@ -18,10 +18,10 @@ pub struct Track {
 
 pub fn sort_by_closest(details: &tree::AnalysisDetails, seeds: &Vec<Track>) -> Vec<Track> {
     let opts = extended_isolation_forest::ForestOptions {
-        n_trees: 200,
+        n_trees: 1000,
         sample_size: seeds.len().min(256),
         max_tree_depth: None,
-        extension_level: 4,
+        extension_level: 10,
     };
     let seed_array = &*seeds.iter().map(|s| s.metrics).collect::<Vec<_>>();
     let forest = extended_isolation_forest::Forest::from_slice(seed_array, &opts).unwrap();
