@@ -8,21 +8,21 @@ This API is used to provide a list of tracks based upon a provied list of seed t
 API used by the Lyrion `Don't Stop The Music` mixer. API request payload is a JSON string, and the
 response is a new-line separated list of tracks.
 
-| Field       | Type                      | Description                                                  | Default         |
-| ----------- | ------------------------- |--------------------------------------------------------------|-----------------|
-| count       | Int                       | Number of tracks to return (1-50).                           | `5`             |
-| filtergenre | Bool (1/0)                | Filter tracks on `genregroups`.                              | `0`             |
-| filterxmas  | Bool (1/0)                | Exclude `Christmas` genre tracks, unless in december.        | `0`             |
-| min         | Int                       | Min track duration (seconds).                                | _(none)_        |
-| max         | Int                       | Max track duration (seconds).                                | _(none)_        |
-| maxbmpdiff  | Int                       | Max BPM difference between seed track and similar tracks.    | _(none)_        |
-| tracks      | Array of strings          | Seed tracks used for mix.                                    | _(mandatory)_   |
-| previous    | Array of strings          | Current tracks in queue, used to prevent repeats, etc.       | `[]`            |
-| shuffle     | Bool (1/0)                | Shuffle list of similar tracks.                              | `0`             |
-| forest      | Bool (1/0)                | Use `extended isolation forest` when more than 1 seed track. | `0`             |
-| norepart    | Int                       | Don't repeat an artist for N tracks.                         | `0`             |
-| norepalb    | Int                       | Don't repeat an album for N tracks.                          | `0`             |
-| genregroups | Array of array of strings | List of genre groups, used when filering on genre.           | _(mandatory)_   |
+| Field       | Type                      | Description                                                   | Default         |
+| ----------- | ------------------------- |---------------------------------------------------------------|-----------------|
+| count       | Int                       | Number of tracks to return (1-50).                            | `5`             |
+| filtergenre | Bool (1/0)                | Filter tracks on `genregroups`.                               | `0`             |
+| filterxmas  | Bool (1/0)                | Exclude `Christmas` genre tracks, unless in december.         | `0`             |
+| min         | Int                       | Min track duration (seconds).                                 | _(none)_        |
+| max         | Int                       | Max track duration (seconds).                                 | _(none)_        |
+| maxbmpdiff  | Int                       | Max BPM difference between seed track and similar tracks.     | _(none)_        |
+| tracks      | Array of strings          | Seed tracks used for mix.                                     | _(mandatory)_   |
+| previous    | Array of strings          | Current tracks in queue, used to prevent repeats, etc.        | `[]`            |
+| shuffle     | Bool (1/0)                | Shuffle list of similar tracks.                               | `0`             |
+| forest      | Bool (1/0)                | Use `extended isolation forest` when more than 4 seed tracks. | `0`             |
+| norepart    | Int                       | Don't repeat an artist for N tracks.                          | `0`             |
+| norepalb    | Int                       | Don't repeat an album for N tracks.                           | `0`             |
+| genregroups | Array of array of strings | List of genre groups, used when filering on genre.            | _(mandatory)_   |
 
 
 Notes:

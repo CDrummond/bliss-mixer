@@ -21,6 +21,7 @@ use std::num::NonZero;
 const CHRISTMAS: &str = "christmas";
 const VARIOUS: &str = "various";
 const VARIOUS_ARTISTS: &str = "various artists";
+const MIN_FOR_FOREST: usize = 4;
 const MIN_COUNT: usize = 1;
 const MAX_COUNT: usize = 50;
 const MIN_NUM_SIM: usize = 5000;
@@ -340,7 +341,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     }
 
     let mut fseeds: Vec<forest::Track> = Vec::new();
-    if useforest>0 && seeds.len()>1 {
+    if useforest>0 && seeds.len()>MIN_FOR_FOREST {
         for seed in seeds.clone() {
             if let Ok(metrics) = db.get_metrics(seed.id) {
                 let track = forest::Track {
@@ -352,7 +353,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         }
     }
 
-    if fseeds.len()>1 {
+    if fseeds.len()>MIN_FOR_FOREST {
         log::debug!("Using extended isolation forest algorithm");
         let mut forest:tree::AnalysisDetails = tree::AnalysisDetails::new();
         let mut forest_ids: HashSet<u64> = HashSet::new();
