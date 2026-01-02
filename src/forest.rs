@@ -1,7 +1,7 @@
 /**
  * BlissMixer: Use Bliss analysis results to create music mixes
  *
- * Copyright (c) 2022-2025 Craig Drummond <craig.p.drummond@gmail.com>
+ * Copyright (c) 2022-2026 Craig Drummond <craig.p.drummond@gmail.com>
  * GPLv3 license.
  *
  **/
