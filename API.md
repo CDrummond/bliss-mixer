@@ -23,6 +23,7 @@ response is a new-line separated list of tracks.
 | norepart    | Int                       | Don't repeat an artist for N tracks.                          | `0`             |
 | norepalb    | Int                       | Don't repeat an album for N tracks.                           | `0`             |
 | genregroups | Array of array of strings | List of genre groups, used when filering on genre.            | _(mandatory)_   |
+| allgenres   | Bool (1/0)                | When checking if a track is in a genre group, should group contain all of track's genres or any of track's genres. | `0`           |
 
 
 Notes:
@@ -88,6 +89,7 @@ is a JSON string, and the response is a new-line separated list of tracks.
 | maxbmpdiff  | Int                       | Max BPM difference between seed track and similar tracks. | _(none)_      |
 | track       | String                    | Track to get similar tracks of.                           | _(mandatory)_ |
 | genregroups | Array of array of strings | List of genre groups, used when filering on genre.        | _(mandatory)_ |
+| allgenres   | Bool (1/0)                | When checking if a track is in a genre group, should group contain all of track's genres or any of track's genres. | `0`           |
 | byartist    | Bool (1/0)                | Restrict to tracks of same artist.                        | _(mandatory)_ |
 
 Notes:

@@ -1,6 +1,9 @@
-0.6.1
+0.7.0
 -----
 1. Speed up extended isolation forest by calculating scores in parallel.
+2. Add option to configure how a track's genre is considered to be in a group;
+   either all of a track's genres must be in the group, or any of a track's
+   genres are in the group.
 
 0.6.0
 -----

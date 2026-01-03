@@ -43,6 +43,7 @@ pub struct MixParams {
     norepart: Option<u16>,
     norepalb: Option<u16>,
     genregroups: Vec<Vec<String>>,
+    allgenres: Option<u16>,
     forest: Option<u16>,
 }
 
@@ -56,6 +57,7 @@ pub struct ListParams {
     maxbpmdiff: Option<i16>,
     track: String,
     genregroups: Vec<Vec<String>>,
+    allgenres: Option<u16>,
     byartist: i16,
 }
 
@@ -168,11 +170,11 @@ fn get_track(db: &db::Db, track: &str) -> Track {
     info
 }
 
-fn get_genres(genregroups: &Vec<HashSet<String>>, track_genres: &HashSet<String>) -> HashSet<String> {
+fn get_genres(genregroups: &Vec<HashSet<String>>, track_genres: &HashSet<String>, allgenres:u16) -> HashSet<String> {
     let mut genres: HashSet<String> = HashSet::new();
 
     for group in genregroups {
-        if track_genres.is_subset(group) {
+        if (allgenres>0 && track_genres.is_subset(group)) || (allgenres==0 && track_genres.intersection(group).count()>0) {
             for genre in group {
                 genres.insert(genre.to_string());
             }
@@ -235,6 +237,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     let norepart = payload.norepart.unwrap_or(0);
     let norepalb = payload.norepalb.unwrap_or(0);
     let genregroups = expand_globbed_genres(&payload.genregroups, &all_db_genres);
+    let allgenres = payload.allgenres.unwrap_or(0);
     let mut useforest = payload.forest.unwrap_or(0);
     let mut seeds: Vec<Track> = Vec::new();
     // Tracks filtered out due to title matching seed or chosen track
@@ -289,7 +292,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
             }
             pcount += 1;
             if filtergenre == 1 && !trk.genres.is_empty() {
-                let genres = get_genres(&genregroups, &trk.genres);
+                let genres = get_genres(&genregroups, &trk.genres, allgenres);
                 acceptable_genres.extend(genres);
             }
         }
@@ -305,7 +308,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
             continue;
         }
         if filtergenre == 1 {
-            let genres = get_genres(&genregroups, &trk.genres);
+            let genres = get_genres(&genregroups, &trk.genres, allgenres);
             acceptable_genres.extend(genres.clone());
         }
         filter_out_ids.insert(trk.id);
@@ -631,6 +634,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
     let track = &payload.track;
     let byartist = payload.byartist;
     let genregroups = expand_globbed_genres(&payload.genregroups, &all_db_genres);
+    let allgenres = payload.allgenres.unwrap_or(0);
     let mut acceptable_genres: HashSet<String> = HashSet::new();
     let mut all_genres_from_groups: HashSet<String> = HashSet::new();
     let mut chosen: Vec<String> = Vec::new();
@@ -656,7 +660,7 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
                 }
             }
             if !seed.genres.is_empty() {
-                let genres = get_genres(&genregroups, &seed.genres);
+                let genres = get_genres(&genregroups, &seed.genres, allgenres);
                 acceptable_genres.extend(genres);
             }
         }
