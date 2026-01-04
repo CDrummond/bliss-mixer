@@ -64,22 +64,14 @@ jobs:
     - name: Build
       run: |
         cargo build --target=x86_64-apple-darwin --release
-        strip target/release/bliss-mixer
-        cp target/release/bliss-mixer releases/bliss-mixer-x86_64
         cargo build --target=aarch64-apple-darwin --release
-        strip target/aarch64-apple-darwin/release/bliss-mixer
-        cp target/aarch64-apple-darwin/release/bliss-mixer releases/bliss-mixer-arm64
 
     - name: Build fat binary
       run: |
         lipo -create \
-          -arch x86_64 releases/bliss-mixer-x86_64 \
-          -arch arm64 releases/bliss-mixer-arm64 \
+          -arch x86_64 target/x86_64-apple-darwin/release/bliss-mixer \
+          -arch arm64 target/aarch64-apple-darwin/release/bliss-mixer \
           -output releases/bliss-mixer
-
-    - name: Remove ununsed binaries
-      run:
-        rm releases/bliss-mixer-x86_64 releases/bliss-mixer-arm64
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
