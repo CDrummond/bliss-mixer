@@ -9,12 +9,12 @@ RUN apt-get install -y curl git build-essential gcc-multilib musl-tools musl-dev
 
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 ENV PATH="/root/.cargo/bin/:${PATH}"
-RUN rustup target add aarch64-unknown-linux-gnu && \
-    rustup target add arm-unknown-linux-gnueabihf
+RUN rustup target add aarch64-unknown-linux-musl && \
+    rustup target add arm-unknown-linux-musleabihf
 
 RUN mkdir /.cargo && \
-    echo '[target.aarch64-unknown-linux-gnu]\nlinker = "aarch64-linux-gnu-gcc"' > /.cargo/config && \
-    echo '[target.arm-unknown-linux-gnueabihf]\nlinker = "arm-linux-gnueabihf-gcc"' >> /.cargo/config
+    echo '[target.aarch64-unknown-linux-musl]\nlinker = "aarch64-linux-musl-gcc"' > /.cargo/config && \
+    echo '[target.arm-unknown-linux-musleabihf]\nlinker = "arm-linux-musleabihf-gcc"' >> /.cargo/config
 
 RUN mkdir /build
 ENV CARGO_TARGET_DIR /build
