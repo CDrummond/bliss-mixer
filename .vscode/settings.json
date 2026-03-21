@@ -1,0 +1,13 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "xxd": true,
+        "cargo build": true,
+        "where": true,
+        "test": true,
+        "/^cmd\\.exe /c \"where cargo\" 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "cargo check": true
+    }
+}

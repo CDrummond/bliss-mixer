@@ -12,6 +12,7 @@ use crate::tree;
 use actix_web::{web, HttpRequest, Responder};
 use chrono::Datelike;
 use globset::Glob;
+use ndarray::{Array1, Array2};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use serde::Deserialize;
@@ -45,6 +46,7 @@ pub struct MixParams {
     genregroups: Vec<Vec<String>>,
     allgenres: Option<u16>,
     forest: Option<u16>,
+    dynamicweights: Option<u16>,
 }
 
 #[derive(Deserialize)]
@@ -222,6 +224,14 @@ fn log(reason: &str, trk: &Track) {
     log::debug!("{} File:{}, Title:{}, Album/Artist:{}, Dur:{}, Sim:{:.18}, Genres:{:?}, BPM:{}", reason, trk.file, trk.title, trk.album, trk.duration, trk.sim, trk.genres, trk.bpm);
 }
 
+fn mahalanobis_distance(a: &[f32; tree::DIMENSIONS], b: &[f32; tree::DIMENSIONS], matrix: &Array2<f32>) -> f32 {
+    let a_vec = Array1::from_vec(a.to_vec());
+    let b_vec = Array1::from_vec(b.to_vec());
+    let diff = &a_vec - &b_vec;
+    let transformed = matrix.dot(&diff);
+    diff.dot(&transformed).sqrt()
+}
+
 pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Responder {
     let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
     let all_db_genres = req.app_data::<web::Data<HashSet<String>>>().unwrap();
@@ -239,6 +249,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     let genregroups = expand_globbed_genres(&payload.genregroups, &all_db_genres);
     let allgenres = payload.allgenres.unwrap_or(0);
     let mut useforest = payload.forest.unwrap_or(0);
+    let usedynamicweights = payload.dynamicweights.unwrap_or(0);
     let mut seeds: Vec<Track> = Vec::new();
     // Tracks filtered out due to title matching seed or chosen track
     let mut filter_out_titles: HashSet<String> = HashSet::new();
@@ -344,7 +355,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     }
 
     let mut fseeds: Vec<forest::Track> = Vec::new();
-    if useforest>0 && seeds.len()>=MIN_FOR_FOREST {
+    if useforest>0 && usedynamicweights==0 && seeds.len()>=MIN_FOR_FOREST {
         for seed in seeds.clone() {
             if let Ok(metrics) = db.get_metrics(seed.id) {
                 let track = forest::Track {
@@ -356,6 +367,146 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         }
     }
 
+    if usedynamicweights == 1 {
+        // Dynamic weighting: compute weight matrix from seed variance, then
+        // use KD-tree as pre-filter and re-rank candidates with dynamic distances
+        let learned_matrix = req.app_data::<web::Data<Option<Array2<f32>>>>().unwrap();
+
+        // Collect raw (unweighted) metrics for all seeds
+        let mut seed_raw_metrics: Vec<[f32; tree::DIMENSIONS]> = Vec::new();
+        for seed in &seeds {
+            if let Ok(raw) = db.get_raw_metrics(seed.id) {
+                seed_raw_metrics.push(raw);
+            }
+        }
+
+        // Determine the weight matrix to use
+        let weight_matrix: Option<Array2<f32>> = if seed_raw_metrics.len() >= 2 {
+            // Multi-seed: compute variance-based weight matrix
+            let seed_arrays: Vec<Array1<f32>> = seed_raw_metrics.iter()
+                .map(|m| Array1::from_vec(m.to_vec()))
+                .collect();
+            let m = bliss_audio::playlist::variance_based_weight_matrix(&seed_arrays);
+            if m.is_some() {
+                log::debug!("Using variance-based dynamic weight matrix from {} seeds", seed_raw_metrics.len());
+            }
+            m
+        } else if learned_matrix.is_some() {
+            // Single seed: use the learned Mahalanobis matrix
+            log::debug!("Using learned Mahalanobis matrix for single seed");
+            learned_matrix.get_ref().clone()
+        } else {
+            None
+        };
+
+        if let Some(matrix) = weight_matrix {
+            log::debug!("Using dynamic weighting algorithm");
+
+            // Compute the mean of seed raw metrics (to use as the "ideal" point)
+            let mut mean_raw = [0.0f32; tree::DIMENSIONS];
+            for raw in &seed_raw_metrics {
+                for i in 0..tree::DIMENSIONS {
+                    mean_raw[i] += raw[i];
+                }
+            }
+            for i in 0..tree::DIMENSIONS {
+                mean_raw[i] /= seed_raw_metrics.len() as f32;
+            }
+
+            // Get a large candidate pool from KD-tree using each seed
+            let mut candidate_ids: HashSet<u64> = HashSet::new();
+            let num_per_seed = (10000 / seeds.len()).min(5000);
+            for seed in &seeds {
+                if let Ok(metrics) = db.get_metrics(seed.id) {
+                    let sim_tracks = tree.get_similars(&metrics, NonZero::new(num_per_seed).unwrap());
+                    for sim_track in sim_tracks {
+                        candidate_ids.insert(sim_track.id);
+                    }
+                }
+            }
+
+            // Re-rank candidates using dynamic Mahalanobis distance
+            let mut scored: Vec<(u64, f32)> = Vec::new();
+            for &cid in &candidate_ids {
+                if filter_out_ids.contains(&cid) {
+                    continue;
+                }
+                if let Ok(raw) = db.get_raw_metrics(cid) {
+                    let dist = mahalanobis_distance(&mean_raw, &raw, &matrix);
+                    scored.push((cid, dist));
+                }
+            }
+            scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+            // Apply filters and build chosen list
+            for (cid, dist) in scored {
+                filter_out_ids.insert(cid);
+                let mut trk: Track = get_track_from_id(&db, cid);
+                trk.sim = dist;
+                if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
+                    log("DISCARD(duration)", &trk);
+                    continue;
+                }
+                if maxbpmdiff > 0 && minbpm > 0 && maxbpm > 0 && trk.bpm>0 && (trk.bpm<(minbpm-maxbpmdiff) || trk.bpm>(maxbpm+maxbpmdiff)) {
+                    log("DISCARD(bpm)", &trk);
+                    continue;
+                }
+                if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
+                    log("DISCARD(genre)", &trk);
+                    continue;
+                }
+                if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
+                    log("DISCARD(christmas)", &trk);
+                    continue;
+                }
+                if chosen_albums.contains(&trk.album) {
+                    log("DISCARD(album)", &trk);
+                    continue;
+                }
+                let track_file = TrackFile {
+                    file: trk.file.clone(),
+                    sim: trk.sim,
+                };
+                if norepart > 0 && filter_out_artists.contains(&trk.artist) {
+                    log("FILTER(artist)", &trk);
+                    filtered.push(track_file);
+                    continue;
+                }
+                if !trk.is_various && norepalb > 0 && filter_out_albums.contains(&trk.album) {
+                    log("FILTER(album)", &trk);
+                    filtered.push(track_file);
+                    continue;
+                }
+                if filter_out_titles.contains(&trk.title) {
+                    log("FILTER(title)", &trk);
+                    filtered.push(track_file);
+                    continue;
+                }
+                log("USABLE", &trk);
+                filter_out_titles.insert(trk.title.clone());
+                if norepart > 0 {
+                    filter_out_artists.insert(trk.artist.clone());
+                }
+                if norepalb > 0 {
+                    filter_out_albums.insert(trk.album.clone());
+                }
+                chosen_albums.insert(trk.album.clone());
+                chosen.push(track_file.clone());
+
+                if chosen.len()>=similarity_count {
+                    break;
+                }
+            }
+        } else {
+            // No weight matrix available (single seed, no learned matrix) — fall back to standard
+            log::debug!("Dynamic weighting requested but no weight matrix available, falling back to standard algorithm");
+            useforest = 0;
+            // Fall through to standard algorithm below
+        }
+    }
+
+    // Only run forest/standard if dynamic weighting didn't produce results
+    if chosen.is_empty() {
     if fseeds.len()>=MIN_FOR_FOREST {
         log::debug!("Using extended isolation forest algorithm");
         let mut forest:tree::AnalysisDetails = tree::AnalysisDetails::new();
@@ -566,6 +717,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
             }
         }
     }
+    } // end forest/standard fallback
 
     db.close();
 

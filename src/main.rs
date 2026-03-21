@@ -8,6 +8,7 @@
 
 use actix_web::{client, middleware::Logger, web, App, HttpServer};
 use argparse::{ArgumentParser, Store, StoreTrue};
+use ndarray::Array2;
 use std::collections::HashSet;
 use std::path::Path;
 use std::process;
@@ -19,6 +20,67 @@ mod tree;
 mod upload;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+fn load_learned_matrix(path: &str) -> Option<Array2<f32>> {
+    if path.is_empty() {
+        return None;
+    }
+    let matrix_path = Path::new(path);
+    if !matrix_path.exists() {
+        log::warn!("Matrix file '{}' does not exist", path);
+        return None;
+    }
+    match std::fs::read_to_string(matrix_path) {
+        Ok(contents) => {
+            match serde_json::from_str::<serde_json::Value>(&contents) {
+                Ok(json) => {
+                    // Support blissify config.json format: {"m": {"v": 1, "dim": [N, N], "data": [...]}}
+                    let m_obj = if json.get("m").is_some() {
+                        json.get("m").unwrap()
+                    } else {
+                        &json
+                    };
+                    if let (Some(dim), Some(data)) = (m_obj.get("dim"), m_obj.get("data")) {
+                        let dims: Vec<usize> = dim.as_array()
+                            .unwrap_or(&vec![])
+                            .iter()
+                            .filter_map(|v| v.as_u64().map(|u| u as usize))
+                            .collect();
+                        let values: Vec<f32> = data.as_array()
+                            .unwrap_or(&vec![])
+                            .iter()
+                            .filter_map(|v| v.as_f64().map(|f| f as f32))
+                            .collect();
+                        if dims.len() == 2 && dims[0] == tree::DIMENSIONS && dims[1] == tree::DIMENSIONS
+                            && values.len() == tree::DIMENSIONS * tree::DIMENSIONS
+                        {
+                            match Array2::from_shape_vec((dims[0], dims[1]), values) {
+                                Ok(matrix) => {
+                                    log::info!("Loaded learned Mahalanobis matrix from '{}'", path);
+                                    return Some(matrix);
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to construct matrix: {}", e);
+                                }
+                            }
+                        } else {
+                            log::error!("Matrix dimensions {:?} don't match expected {}x{}", dims, tree::DIMENSIONS, tree::DIMENSIONS);
+                        }
+                    } else {
+                        log::error!("Matrix JSON missing 'dim' or 'data' fields");
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to parse matrix JSON: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to read matrix file '{}': {}", path, e);
+        }
+    }
+    None
+}
 
 async fn send_port_to_lms(lms_server: &String, port: u16) {
     if !lms_server.is_empty() {
@@ -55,6 +117,7 @@ async fn main() -> std::io::Result<()> {
     let mut lms_server = String::new();
     let mut allow_db_upload = false;
     let mut weights = String::new();
+    let mut matrix_path = String::new();
     {
         let db_path_help = format!("Database location (default: {})", db_path);
         let port_help = format!("Port number (default: {})", port);
@@ -73,6 +136,7 @@ async fn main() -> std::io::Result<()> {
         arg_parse.refer(&mut lms_server).add_option(&["-L", "--lms"], Store, "LMS server (hostname:port, or IP address:port)");
         arg_parse.refer(&mut allow_db_upload).add_option(&["-u", "--upload"], StoreTrue, "Allow uploading of database");
         arg_parse.refer(&mut weights).add_option(&["-w", "--weights"], Store, &weights_help);
+        arg_parse.refer(&mut matrix_path).add_option(&["-m", "--matrix"], Store, "Path to learned Mahalanobis matrix JSON file");
         arg_parse.parse_args_or_exit();
     }
 
@@ -124,6 +188,7 @@ async fn main() -> std::io::Result<()> {
         if !weights.is_empty() {
             db::init_weights(&weights);
         }
+        let learned_matrix: Option<Array2<f32>> = load_learned_matrix(&matrix_path);
         let mut all_db_genres = HashSet::new();
         let mut tree_details = tree::AnalysisDetails::new();
         if path.exists() {
@@ -147,6 +212,7 @@ async fn main() -> std::io::Result<()> {
                 .data(tree.clone())
                 .data(all_db_genres.clone())
                 .data(db_path.clone())
+                .data(learned_matrix.clone())
                 .route("/api/mix", web::post().to(api::mix))
                 .route("/api/list", web::post().to(api::list))
                 .route("/api/ready", web::get().to(api::ready))
