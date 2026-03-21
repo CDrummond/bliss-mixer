@@ -28,5 +28,5 @@ extended-isolation-forest = { version = "0.2.3", default-features = false }
 noisy_float = "0.2.0"
 rayon = "1.11.0"
 num_cpus = "1.13.0"
-bliss-audio = { git = "https://github.com/chrober/bliss-rs.git", branch = "master", default-features = false }
+bliss-audio = { git = "https://github.com/chrober/bliss-rs.git", branch = "feature/analysis-gate-and-variance-weights", default-features = false }
 ndarray = "0.16.1"
