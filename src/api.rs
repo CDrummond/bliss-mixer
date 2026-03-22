@@ -9,13 +9,13 @@
 use crate::db;
 use crate::forest;
 use crate::tree;
-use actix_web::{web, HttpRequest, Responder};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use chrono::Datelike;
 use globset::Glob;
 use ndarray::{Array1, Array2};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::num::NonZero;
 
@@ -29,6 +29,28 @@ const MIN_NUM_SIM: usize = 5000;
 const MAX_ARTIST_TRACKS: usize = 5;
 // KDTree is returning squared-euc distance. So max diff = sqr(0.1) = 0.01
 const MAX_ARTIST_TRACK_SIM_DIFF: f32 = 0.01;
+
+const FEATURE_NAMES: [&str; tree::DIMENSIONS] = [
+    "Tempo", "Zcr", "MeanSpecCentroid", "StdDevSpecCentroid",
+    "MeanSpecRolloff", "StdDevSpecRolloff", "MeanSpecFlatness", "StdDevSpecFlatness",
+    "MeanLoudness", "StdDevLoudness",
+    "Chroma1", "Chroma2", "Chroma3", "Chroma4", "Chroma5", "Chroma6", "Chroma7",
+    "Chroma8", "Chroma9", "Chroma10", "Chroma11", "Chroma12", "Chroma13",
+];
+
+#[derive(Serialize)]
+struct DynamicWeightsDebug {
+    algorithm: String,
+    num_seeds: usize,
+    candidate_pool: usize,
+    weights: Vec<FeatureWeight>,
+}
+
+#[derive(Serialize)]
+struct FeatureWeight {
+    feature: String,
+    weight: f32,
+}
 
 #[derive(Deserialize)]
 pub struct MixParams {
@@ -232,7 +254,40 @@ fn mahalanobis_distance(a: &[f32; tree::DIMENSIONS], b: &[f32; tree::DIMENSIONS]
     diff.dot(&transformed).sqrt()
 }
 
-pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Responder {
+fn variance_based_weight_matrix(seeds: &[Array1<f32>]) -> Option<Array2<f32>> {
+    if seeds.len() < 2 {
+        return None;
+    }
+    let n = seeds[0].len();
+    let n_seeds = seeds.len() as f32;
+
+    let mut mean = Array1::<f32>::zeros(n);
+    for seed in seeds {
+        mean = mean + seed;
+    }
+    mean /= n_seeds;
+
+    let mut variance = Array1::<f32>::zeros(n);
+    for seed in seeds {
+        let diff = seed - &mean;
+        variance = variance + &diff * &diff;
+    }
+    variance /= n_seeds;
+
+    let epsilon = 1e-6;
+    let mut weights = variance.mapv(|v| 1.0 / (v + epsilon));
+
+    let sum: f32 = weights.sum();
+    weights *= n as f32 / sum;
+
+    let mut m = Array2::<f32>::zeros((n, n));
+    for i in 0..n {
+        m[[i, i]] = weights[i];
+    }
+    Some(m)
+}
+
+pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpResponse {
     let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
     let all_db_genres = req.app_data::<web::Data<HashSet<String>>>().unwrap();
     let db_path = req.app_data::<web::Data<String>>().unwrap();
@@ -266,6 +321,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     // Albums from matching tracks. Don't want same album chosen twice, even if
     // norepalb is 0 or album is a VA album.
     let mut chosen_albums: HashSet<String> = HashSet::new();
+    let mut debug_info: Option<DynamicWeightsDebug> = None;
 
     if count < MIN_COUNT {
         count = MIN_COUNT;
@@ -381,26 +437,41 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         }
 
         // Determine the weight matrix to use
-        let weight_matrix: Option<Array2<f32>> = if seed_raw_metrics.len() >= 2 {
+        let (weight_matrix, algorithm_name): (Option<Array2<f32>>, &str) = if seed_raw_metrics.len() >= 2 {
             // Multi-seed: compute variance-based weight matrix
             let seed_arrays: Vec<Array1<f32>> = seed_raw_metrics.iter()
                 .map(|m| Array1::from_vec(m.to_vec()))
                 .collect();
-            let m = bliss_audio::playlist::variance_based_weight_matrix(&seed_arrays);
+            let m = variance_based_weight_matrix(&seed_arrays);
             if m.is_some() {
                 log::debug!("Using variance-based dynamic weight matrix from {} seeds", seed_raw_metrics.len());
             }
-            m
+            (m, "variance-based")
         } else if learned_matrix.is_some() {
             // Single seed: use the learned Mahalanobis matrix
             log::debug!("Using learned Mahalanobis matrix for single seed");
-            learned_matrix.get_ref().clone()
+            (learned_matrix.get_ref().clone(), "learned-matrix")
         } else {
-            None
+            (None, "none")
         };
 
-        if let Some(matrix) = weight_matrix {
+        if let Some(ref matrix) = weight_matrix {
             log::debug!("Using dynamic weighting algorithm");
+
+            // Build debug info with the diagonal weights
+            let feature_weights: Vec<FeatureWeight> = (0..tree::DIMENSIONS)
+                .map(|i| FeatureWeight {
+                    feature: FEATURE_NAMES[i].to_string(),
+                    weight: matrix[[i, i]],
+                })
+                .collect();
+
+            // Log weights to bliss-mixer's own log
+            let weights_summary: Vec<String> = feature_weights.iter()
+                .filter(|fw| fw.weight > 0.01)
+                .map(|fw| format!("{}={:.3}", fw.feature, fw.weight))
+                .collect();
+            log::debug!("Dynamic weights (non-trivial): {}", weights_summary.join(", "));
 
             // Compute the mean of seed raw metrics (to use as the "ideal" point)
             let mut mean_raw = [0.0f32; tree::DIMENSIONS];
@@ -425,6 +496,14 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                 }
             }
 
+            // Store debug info
+            debug_info = Some(DynamicWeightsDebug {
+                algorithm: algorithm_name.to_string(),
+                num_seeds: seed_raw_metrics.len(),
+                candidate_pool: candidate_ids.len(),
+                weights: feature_weights,
+            });
+
             // Re-rank candidates using dynamic Mahalanobis distance
             let mut scored: Vec<(u64, f32)> = Vec::new();
             for &cid in &candidate_ids {
@@ -432,7 +511,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                     continue;
                 }
                 if let Ok(raw) = db.get_raw_metrics(cid) {
-                    let dist = mahalanobis_distance(&mean_raw, &raw, &matrix);
+                    let dist = mahalanobis_distance(&mean_raw, &raw, matrix);
                     scored.push((cid, dist));
                 }
             }
@@ -770,7 +849,15 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         resp += &track.file;
         resp += "\n";
     }
-    resp
+
+    let mut http_resp = HttpResponse::Ok();
+    if let Some(di) = debug_info {
+        if let Ok(json) = serde_json::to_string(&di) {
+            log::debug!("Dynamic weights debug: {}", json);
+            http_resp.set_header("X-Bliss-Debug", json);
+        }
+    }
+    http_resp.body(resp)
 }
 
 pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Responder {
