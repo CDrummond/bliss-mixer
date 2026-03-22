@@ -43,9 +43,24 @@ const FEATURE_NAMES: [&str; tree::DIMENSIONS] = [
 struct DynamicWeightsDebug {
     algorithm: String,
     num_seeds: usize,
-    candidate_pool: usize,
     weights: Vec<FeatureWeight>,
+    stats: StatsDebug,
     timing_ms: TimingDebug,
+}
+
+#[derive(Serialize)]
+struct StatsDebug {
+    db_total: usize,
+    scored: usize,
+    discarded_duration: usize,
+    discarded_bpm: usize,
+    discarded_genre: usize,
+    discarded_xmas: usize,
+    discarded_album: usize,
+    filtered_artist: usize,
+    filtered_album: usize,
+    filtered_title: usize,
+    usable: usize,
 }
 
 #[derive(Serialize)]
@@ -513,7 +528,8 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
                 scored.push((*id, dist));
             }
             let distance_calc_ms = t_dist.elapsed().as_millis() as u64;
-            log::debug!("Distance calculation: {} tracks scored in {}ms", scored.len(), distance_calc_ms);
+            let scored_count = scored.len();
+            log::debug!("Distance calculation: {} tracks scored in {}ms", scored_count, distance_calc_ms);
 
             let t_sort = Instant::now();
             scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
@@ -522,28 +538,46 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
 
             // Apply filters and build chosen list
             let t_filter = Instant::now();
+            let mut stats = StatsDebug {
+                db_total: all_raw.len(),
+                scored: scored_count,
+                discarded_duration: 0,
+                discarded_bpm: 0,
+                discarded_genre: 0,
+                discarded_xmas: 0,
+                discarded_album: 0,
+                filtered_artist: 0,
+                filtered_album: 0,
+                filtered_title: 0,
+                usable: 0,
+            };
             for (cid, dist) in scored {
                 filter_out_ids.insert(cid);
                 let mut trk: Track = get_track_from_id(&db, cid);
                 trk.sim = dist;
                 if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
                     log("DISCARD(duration)", &trk);
+                    stats.discarded_duration += 1;
                     continue;
                 }
                 if maxbpmdiff > 0 && minbpm > 0 && maxbpm > 0 && trk.bpm>0 && (trk.bpm<(minbpm-maxbpmdiff) || trk.bpm>(maxbpm+maxbpmdiff)) {
                     log("DISCARD(bpm)", &trk);
+                    stats.discarded_bpm += 1;
                     continue;
                 }
                 if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
                     log("DISCARD(genre)", &trk);
+                    stats.discarded_genre += 1;
                     continue;
                 }
                 if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
                     log("DISCARD(christmas)", &trk);
+                    stats.discarded_xmas += 1;
                     continue;
                 }
                 if chosen_albums.contains(&trk.album) {
                     log("DISCARD(album)", &trk);
+                    stats.discarded_album += 1;
                     continue;
                 }
                 let track_file = TrackFile {
@@ -552,6 +586,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
                 };
                 if norepart > 0 && filter_out_artists.contains(&trk.artist) {
                     log("FILTER(artist)", &trk);
+                    stats.filtered_artist += 1;
 
                     if shuffle == 1 {
                         match matched_artists.get_mut(&trk.artist) {
@@ -569,15 +604,18 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
                 }
                 if !trk.is_various && norepalb > 0 && filter_out_albums.contains(&trk.album) {
                     log("FILTER(album)", &trk);
+                    stats.filtered_album += 1;
                     filtered.push(track_file);
                     continue;
                 }
                 if filter_out_titles.contains(&trk.title) {
                     log("FILTER(title)", &trk);
+                    stats.filtered_title += 1;
                     filtered.push(track_file);
                     continue;
                 }
                 log("USABLE", &trk);
+                stats.usable += 1;
                 filter_out_titles.insert(trk.title.clone());
                 if norepart > 0 {
                     filter_out_artists.insert(trk.artist.clone());
@@ -609,8 +647,8 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
             debug_info = Some(DynamicWeightsDebug {
                 algorithm: algorithm_name.to_string(),
                 num_seeds: seed_raw_metrics.len(),
-                candidate_pool: all_raw.len(),
                 weights: feature_weights,
+                stats,
                 timing_ms: TimingDebug {
                     db_load: db_load_ms,
                     distance_calc: distance_calc_ms,
