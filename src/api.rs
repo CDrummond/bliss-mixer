@@ -18,6 +18,7 @@ use rand::thread_rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::num::NonZero;
+use std::time::Instant;
 
 const CHRISTMAS: &str = "christmas";
 const VARIOUS: &str = "various";
@@ -44,6 +45,16 @@ struct DynamicWeightsDebug {
     num_seeds: usize,
     candidate_pool: usize,
     weights: Vec<FeatureWeight>,
+    timing_ms: TimingDebug,
+}
+
+#[derive(Serialize)]
+struct TimingDebug {
+    db_load: u64,
+    distance_calc: u64,
+    sort: u64,
+    filter: u64,
+    total: u64,
 }
 
 #[derive(Serialize)]
@@ -457,6 +468,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
 
         if let Some(ref matrix) = weight_matrix {
             log::debug!("Using dynamic weighting algorithm");
+            let t_total = Instant::now();
 
             // Build debug info with the diagonal weights
             let feature_weights: Vec<FeatureWeight> = (0..tree::DIMENSIONS)
@@ -484,40 +496,32 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
                 mean_raw[i] /= seed_raw_metrics.len() as f32;
             }
 
-            // Get a large candidate pool from KD-tree using each seed
-            let mut candidate_ids: HashSet<u64> = HashSet::new();
-            let num_per_seed = (10000 / seeds.len()).min(5000);
-            for seed in &seeds {
-                if let Ok(metrics) = db.get_metrics(seed.id) {
-                    let sim_tracks = tree.get_similars(&metrics, NonZero::new(num_per_seed).unwrap());
-                    for sim_track in sim_tracks {
-                        candidate_ids.insert(sim_track.id);
-                    }
-                }
-            }
+            // Full DB scan: compute Mahalanobis distance for every track
+            let t_db = Instant::now();
+            let all_raw = db.get_all_raw_metrics();
+            let db_load_ms = t_db.elapsed().as_millis() as u64;
+            log::debug!("DB load: {} tracks in {}ms", all_raw.len(), db_load_ms);
 
-            // Store debug info
-            debug_info = Some(DynamicWeightsDebug {
-                algorithm: algorithm_name.to_string(),
-                num_seeds: seed_raw_metrics.len(),
-                candidate_pool: candidate_ids.len(),
-                weights: feature_weights,
-            });
-
-            // Re-rank candidates using dynamic Mahalanobis distance
+            // Score all tracks using dynamic Mahalanobis distance
+            let t_dist = Instant::now();
             let mut scored: Vec<(u64, f32)> = Vec::new();
-            for &cid in &candidate_ids {
-                if filter_out_ids.contains(&cid) {
+            for (id, raw) in &all_raw {
+                if filter_out_ids.contains(id) {
                     continue;
                 }
-                if let Ok(raw) = db.get_raw_metrics(cid) {
-                    let dist = mahalanobis_distance(&mean_raw, &raw, matrix);
-                    scored.push((cid, dist));
-                }
+                let dist = mahalanobis_distance(&mean_raw, raw, matrix);
+                scored.push((*id, dist));
             }
+            let distance_calc_ms = t_dist.elapsed().as_millis() as u64;
+            log::debug!("Distance calculation: {} tracks scored in {}ms", scored.len(), distance_calc_ms);
+
+            let t_sort = Instant::now();
             scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            let sort_ms = t_sort.elapsed().as_millis() as u64;
+            log::debug!("Sort: {}ms", sort_ms);
 
             // Apply filters and build chosen list
+            let t_filter = Instant::now();
             for (cid, dist) in scored {
                 filter_out_ids.insert(cid);
                 let mut trk: Track = get_track_from_id(&db, cid);
@@ -548,6 +552,18 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
                 };
                 if norepart > 0 && filter_out_artists.contains(&trk.artist) {
                     log("FILTER(artist)", &trk);
+
+                    if shuffle == 1 {
+                        match matched_artists.get_mut(&trk.artist) {
+                            Some(artist) => {
+                                if artist.tracks.len() < MAX_ARTIST_TRACKS && (dist - artist.tracks[0].sim).abs() < MAX_ARTIST_TRACK_SIM_DIFF {
+                                    artist.tracks.push(track_file.clone())
+                                }
+                            }
+                            None => {}
+                        }
+                    }
+
                     filtered.push(track_file);
                     continue;
                 }
@@ -572,10 +588,37 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
                 chosen_albums.insert(trk.album.clone());
                 chosen.push(track_file.clone());
 
+                if shuffle == 1 {
+                    let mut matched_artist = MatchedArtist {
+                        pos: chosen.len() - 1,
+                        tracks: Vec::new(),
+                    };
+                    matched_artist.tracks.push(track_file);
+                    matched_artists.insert(trk.artist.clone(), matched_artist);
+                }
+
                 if chosen.len()>=similarity_count {
                     break;
                 }
             }
+            let filter_ms = t_filter.elapsed().as_millis() as u64;
+            let total_ms = t_total.elapsed().as_millis() as u64;
+            log::debug!("Filter+select: {}ms, Total dynamic weights: {}ms", filter_ms, total_ms);
+
+            // Store debug info
+            debug_info = Some(DynamicWeightsDebug {
+                algorithm: algorithm_name.to_string(),
+                num_seeds: seed_raw_metrics.len(),
+                candidate_pool: all_raw.len(),
+                weights: feature_weights,
+                timing_ms: TimingDebug {
+                    db_load: db_load_ms,
+                    distance_calc: distance_calc_ms,
+                    sort: sort_ms,
+                    filter: filter_ms,
+                    total: total_ms,
+                },
+            });
         } else {
             // No weight matrix available (single seed, no learned matrix) — fall back to standard
             log::debug!("Dynamic weighting requested but no weight matrix available, falling back to standard algorithm");
