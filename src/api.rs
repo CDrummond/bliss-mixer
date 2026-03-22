@@ -95,6 +95,7 @@ pub struct MixParams {
     allgenres: Option<u16>,
     forest: Option<u16>,
     dynamicweights: Option<u16>,
+    debug: Option<u16>,
 }
 
 #[derive(Deserialize)]
@@ -331,6 +332,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
     let allgenres = payload.allgenres.unwrap_or(0);
     let mut useforest = payload.forest.unwrap_or(0);
     let usedynamicweights = payload.dynamicweights.unwrap_or(0);
+    let wantdebug = payload.debug.unwrap_or(0) == 1;
     let mut seeds: Vec<Track> = Vec::new();
     // Tracks filtered out due to title matching seed or chosen track
     let mut filter_out_titles: HashSet<String> = HashSet::new();
@@ -485,20 +487,14 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
             log::debug!("Using dynamic weighting algorithm");
             let t_total = Instant::now();
 
-            // Build debug info with the diagonal weights
-            let feature_weights: Vec<FeatureWeight> = (0..tree::DIMENSIONS)
-                .map(|i| FeatureWeight {
-                    feature: FEATURE_NAMES[i].to_string(),
-                    weight: matrix[[i, i]],
-                })
-                .collect();
-
-            // Log weights to bliss-mixer's own log
-            let weights_summary: Vec<String> = feature_weights.iter()
-                .filter(|fw| fw.weight > 0.01)
-                .map(|fw| format!("{}={:.3}", fw.feature, fw.weight))
-                .collect();
-            log::debug!("Dynamic weights (non-trivial): {}", weights_summary.join(", "));
+            if wantdebug {
+                // Build debug info with the diagonal weights
+                let weights_summary: Vec<String> = (0..tree::DIMENSIONS)
+                    .filter(|&i| matrix[[i, i]] > 0.01)
+                    .map(|i| format!("{}={:.3}", FEATURE_NAMES[i], matrix[[i, i]]))
+                    .collect();
+                log::debug!("Dynamic weights (non-trivial): {}", weights_summary.join(", "));
+            }
 
             // Compute the mean of seed raw metrics (to use as the "ideal" point)
             let mut mean_raw = [0.0f32; tree::DIMENSIONS];
@@ -643,20 +639,28 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
             let total_ms = t_total.elapsed().as_millis() as u64;
             log::debug!("Filter+select: {}ms, Total dynamic weights: {}ms", filter_ms, total_ms);
 
-            // Store debug info
-            debug_info = Some(DynamicWeightsDebug {
-                algorithm: algorithm_name.to_string(),
-                num_seeds: seed_raw_metrics.len(),
-                weights: feature_weights,
-                stats,
-                timing_ms: TimingDebug {
-                    db_load: db_load_ms,
-                    distance_calc: distance_calc_ms,
-                    sort: sort_ms,
-                    filter: filter_ms,
-                    total: total_ms,
-                },
-            });
+            // Store debug info only if requested
+            if wantdebug {
+                let feature_weights: Vec<FeatureWeight> = (0..tree::DIMENSIONS)
+                    .map(|i| FeatureWeight {
+                        feature: FEATURE_NAMES[i].to_string(),
+                        weight: matrix[[i, i]],
+                    })
+                    .collect();
+                debug_info = Some(DynamicWeightsDebug {
+                    algorithm: algorithm_name.to_string(),
+                    num_seeds: seed_raw_metrics.len(),
+                    weights: feature_weights,
+                    stats,
+                    timing_ms: TimingDebug {
+                        db_load: db_load_ms,
+                        distance_calc: distance_calc_ms,
+                        sort: sort_ms,
+                        filter: filter_ms,
+                        total: total_ms,
+                    },
+                });
+            }
         } else {
             // No weight matrix available (single seed, no learned matrix) — fall back to standard
             log::debug!("Dynamic weighting requested but no weight matrix available, falling back to standard algorithm");
