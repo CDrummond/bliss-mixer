@@ -10,6 +10,8 @@ use crate::db;
 use crate::forest;
 use crate::tree;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use bliss_audio::AnalysisIndex;
+use bliss_audio::playlist::{mahalanobis_distance, variance_based_weight_matrix};
 use chrono::Datelike;
 use globset::Glob;
 use ndarray::{Array1, Array2};
@@ -19,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::num::NonZero;
 use std::time::Instant;
+use strum::IntoEnumIterator;
 
 const CHRISTMAS: &str = "christmas";
 const VARIOUS: &str = "various";
@@ -30,14 +33,6 @@ const MIN_NUM_SIM: usize = 5000;
 const MAX_ARTIST_TRACKS: usize = 5;
 // KDTree is returning squared-euc distance. So max diff = sqr(0.1) = 0.01
 const MAX_ARTIST_TRACK_SIM_DIFF: f32 = 0.01;
-
-const FEATURE_NAMES: [&str; tree::DIMENSIONS] = [
-    "Tempo", "Zcr", "MeanSpecCentroid", "StdDevSpecCentroid",
-    "MeanSpecRolloff", "StdDevSpecRolloff", "MeanSpecFlatness", "StdDevSpecFlatness",
-    "MeanLoudness", "StdDevLoudness",
-    "Chroma1", "Chroma2", "Chroma3", "Chroma4", "Chroma5", "Chroma6", "Chroma7",
-    "Chroma8", "Chroma9", "Chroma10", "Chroma11", "Chroma12", "Chroma13",
-];
 
 #[derive(Serialize)]
 struct DynamicWeightsDebug {
@@ -273,47 +268,6 @@ fn log(reason: &str, trk: &Track) {
     log::debug!("{} File:{}, Title:{}, Album/Artist:{}, Dur:{}, Sim:{:.18}, Genres:{:?}, BPM:{}", reason, trk.file, trk.title, trk.album, trk.duration, trk.sim, trk.genres, trk.bpm);
 }
 
-fn mahalanobis_distance(a: &[f32; tree::DIMENSIONS], b: &[f32; tree::DIMENSIONS], matrix: &Array2<f32>) -> f32 {
-    let a_vec = Array1::from_vec(a.to_vec());
-    let b_vec = Array1::from_vec(b.to_vec());
-    let diff = &a_vec - &b_vec;
-    let transformed = matrix.dot(&diff);
-    diff.dot(&transformed).sqrt()
-}
-
-fn variance_based_weight_matrix(seeds: &[Array1<f32>]) -> Option<Array2<f32>> {
-    if seeds.len() < 2 {
-        return None;
-    }
-    let n = seeds[0].len();
-    let n_seeds = seeds.len() as f32;
-
-    let mut mean = Array1::<f32>::zeros(n);
-    for seed in seeds {
-        mean = mean + seed;
-    }
-    mean /= n_seeds;
-
-    let mut variance = Array1::<f32>::zeros(n);
-    for seed in seeds {
-        let diff = seed - &mean;
-        variance = variance + &diff * &diff;
-    }
-    variance /= n_seeds;
-
-    let epsilon = 1e-6;
-    let mut weights = variance.mapv(|v| 1.0 / (v + epsilon));
-
-    let sum: f32 = weights.sum();
-    weights *= n as f32 / sum;
-
-    let mut m = Array2::<f32>::zeros((n, n));
-    for i in 0..n {
-        m[[i, i]] = weights[i];
-    }
-    Some(m)
-}
-
 pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpResponse {
     let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
     let all_db_genres = req.app_data::<web::Data<HashSet<String>>>().unwrap();
@@ -489,9 +443,9 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
 
             if wantdebug {
                 // Build debug info with the diagonal weights
-                let weights_summary: Vec<String> = (0..tree::DIMENSIONS)
-                    .filter(|&i| matrix[[i, i]] > 0.01)
-                    .map(|i| format!("{}={:.3}", FEATURE_NAMES[i], matrix[[i, i]]))
+                let weights_summary: Vec<String> = AnalysisIndex::iter().enumerate()
+                    .filter(|&(i, _)| matrix[[i, i]] > 0.01)
+                    .map(|(i, idx)| format!("{:?}={:.3}", idx, matrix[[i, i]]))
                     .collect();
                 log::debug!("Dynamic weights (non-trivial): {}", weights_summary.join(", "));
             }
@@ -515,12 +469,14 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
 
             // Score all tracks using dynamic Mahalanobis distance
             let t_dist = Instant::now();
+            let mean_arr = Array1::from_vec(mean_raw.to_vec());
             let mut scored: Vec<(u64, f32)> = Vec::new();
             for (id, raw) in &all_raw {
                 if filter_out_ids.contains(id) {
                     continue;
                 }
-                let dist = mahalanobis_distance(&mean_raw, raw, matrix);
+                let raw_arr = Array1::from_vec(raw.to_vec());
+                let dist = mahalanobis_distance(&mean_arr, &raw_arr, matrix);
                 scored.push((*id, dist));
             }
             let distance_calc_ms = t_dist.elapsed().as_millis() as u64;
@@ -641,9 +597,9 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
 
             // Store debug info only if requested
             if wantdebug {
-                let feature_weights: Vec<FeatureWeight> = (0..tree::DIMENSIONS)
-                    .map(|i| FeatureWeight {
-                        feature: FEATURE_NAMES[i].to_string(),
+                let feature_weights: Vec<FeatureWeight> = AnalysisIndex::iter().enumerate()
+                    .map(|(i, idx)| FeatureWeight {
+                        feature: format!("{:?}", idx),
                         weight: matrix[[i, i]],
                     })
                     .collect();
