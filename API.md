@@ -24,11 +24,16 @@ response is a new-line separated list of tracks.
 | norepalb    | Int                       | Don't repeat an album for N tracks.                           | `0`             |
 | genregroups | Array of array of strings | List of genre groups, used when filering on genre.            | _(mandatory)_   |
 | allgenres   | Bool (1/0)                | When checking if a track is in a genre group, should group contain all of track's genres or any of track's genres. | `0`           |
+| dynamicweights | Bool (1/0)             | Use variance-based dynamic weighting instead of static weights. Requires 2+ seed tracks. | `0` |
+| debug       | Bool (1/0)                | Include debug diagnostics in `X-Bliss-Debug` response header (only applies when `dynamicweights=1`). | `0` |
 
 
 Notes:
 * If `shuffle` is enabled then the mixer will locate more than `count` similar tracks, shuffle the list, and take the first `count` tracks of the shuffled list.
 * If `forest` is enabled the mixer will first get N similar tracks for each seed track, and use that set of tracks for the forest.
+* `dynamicweights` takes precedence over `forest` — if both are set, dynamic weighting is used.
+* With `dynamicweights`, the mixer computes a variance-based weight matrix from the seed tracks' features, then scores all tracks in the database using Mahalanobis distance. Features with low variance across seeds get higher weight (i.e. the mix preserves what the seeds have in common). Falls back to the standard algorithm if fewer than 2 seeds are provided and no learned matrix is available.
+* When `debug=1` and `dynamicweights=1`, the response includes an `X-Bliss-Debug` HTTP header containing a JSON object with per-feature weights, filter statistics, and timing information.
 * `norepart` and `norepalb` require `previous` list of tracks to be supplied.
 * Set `maxbmpdiff` to 0 (or omit the field) to disable BPM difference checking.
 * Set `min` or `max` to 0 (or omit the fields) to disable filtering on track duration.
@@ -48,6 +53,8 @@ Example request:
     "shuffle": 1,
     "norepart": 10,
     "norepalb": 10,
+    "dynamicweights": 0,
+    "debug": 0,
     "genregroups": [
         [
             "Rock", "Metal"
@@ -61,7 +68,7 @@ Example request:
 
 Send via CURL:
 ```bash
-curl 'http://localhost:12000/api/mix' --compressed -X POST -H 'Content-Type: application/json' --data-raw '{"count":5,"filtergenre":1,"filterxmas":1,"min":60,"max":300,"maxbpmdiff":0,"tracks":["ArtistA/Album/Track1.ogg","ArtistB/Album/Track1.ogg"],"previous":["ArtistA/Album/Track2.ogg","ArtistC/Album/Track2.ogg"],"shuffle":1,"forest":0,"norepart":10,"norepalb":10,"genregroups":[["Rock","Metal"],["Dance","R&B","Pop"]]}'
+curl 'http://localhost:12000/api/mix' --compressed -X POST -H 'Content-Type: application/json' --data-raw '{"count":5,"filtergenre":1,"filterxmas":1,"min":60,"max":300,"maxbpmdiff":0,"tracks":["ArtistA/Album/Track1.ogg","ArtistB/Album/Track1.ogg"],"previous":["ArtistA/Album/Track2.ogg","ArtistC/Album/Track2.ogg"],"shuffle":1,"forest":0,"dynamicweights":0,"debug":0,"norepart":10,"norepalb":10,"genregroups":[["Rock","Metal"],["Dance","R&B","Pop"]]}'
 ```
 
 
@@ -73,6 +80,40 @@ ArtistW/AlbumG/Track9.ogg
 ArtistD/AlbumA/Track2.ogg
 ArtistP/AlbumH/Track10.ogg
 ArtistF/AlbumE/Track2.ogg
+```
+
+When `dynamicweights=1` and `debug=1`, the response also includes an `X-Bliss-Debug` header:
+
+```json
+{
+    "algorithm": "variance-based",
+    "num_seeds": 3,
+    "weights": [
+        {"feature": "Tempo", "weight": 0.123},
+        {"feature": "Zcr", "weight": 0.045},
+        ...
+    ],
+    "stats": {
+        "db_total": 62011,
+        "scored": 61990,
+        "discarded_duration": 120,
+        "discarded_bpm": 45,
+        "discarded_genre": 300,
+        "discarded_xmas": 0,
+        "discarded_album": 15,
+        "filtered_artist": 80,
+        "filtered_album": 20,
+        "filtered_title": 5,
+        "usable": 50
+    },
+    "timing_ms": {
+        "db_load": 35,
+        "distance_calc": 120,
+        "sort": 15,
+        "filter": 8,
+        "total": 180
+    }
+}
 ```
 
 ## List
