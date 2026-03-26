@@ -24,7 +24,8 @@ response is a new-line separated list of tracks.
 | norepalb    | Int                       | Don't repeat an album for N tracks.                           | `0`             |
 | genregroups | Array of array of strings | List of genre groups, used when filering on genre.            | _(mandatory)_   |
 | allgenres   | Bool (1/0)                | When checking if a track is in a genre group, should group contain all of track's genres or any of track's genres. | `0`           |
-| dynamicweights | Bool (1/0)             | Use variance-based dynamic weighting instead of static weights. Requires 2+ seed tracks. | `0` |
+| dynamicweights | Bool (1/0)             | Use adaptive weighting instead of static weights. Requires 2+ seed tracks. | `0` |
+| learnedblend   | Int (0-100)            | Blend ratio for combining learned and variance matrices. 0 = pure variance, 100 = pure learned. Only effective when `dynamicweights=1` and a learned matrix is loaded. | `50` |
 | debug       | Bool (1/0)                | Include debug diagnostics in `X-Bliss-Debug` response header (only applies when `dynamicweights=1`). | `0` |
 
 
@@ -32,7 +33,7 @@ Notes:
 * If `shuffle` is enabled then the mixer will locate more than `count` similar tracks, shuffle the list, and take the first `count` tracks of the shuffled list.
 * If `forest` is enabled the mixer will first get N similar tracks for each seed track, and use that set of tracks for the forest.
 * `dynamicweights` takes precedence over `forest` — if both are set, dynamic weighting is used.
-* With `dynamicweights`, the mixer computes a variance-based weight matrix from the seed tracks' features, then scores all tracks in the database using Mahalanobis distance. Features with low variance across seeds get higher weight (i.e. the mix preserves what the seeds have in common). Falls back to the standard algorithm if fewer than 2 seeds are provided and no learned matrix is available.
+* With `dynamicweights`, the mixer computes a variance-based weight matrix from the seed tracks' features, then scores all tracks in the database using Mahalanobis distance. Features with low variance across seeds get higher weight (i.e. the mix preserves what the seeds have in common). When a learned matrix is also loaded (via `--matrix` CLI flag), the two matrices are blended: `M = (learnedblend/100) * M_learned + (1 - learnedblend/100) * M_variance`. Single-seed requests always use the learned matrix alone. Falls back to the standard algorithm if fewer than 2 seeds are provided and no learned matrix is available.
 * When `debug=1` and `dynamicweights=1`, the response includes an `X-Bliss-Debug` HTTP header containing a JSON object with per-feature weights, filter statistics, and timing information.
 * `norepart` and `norepalb` require `previous` list of tracks to be supplied.
 * Set `maxbmpdiff` to 0 (or omit the field) to disable BPM difference checking.
@@ -54,6 +55,7 @@ Example request:
     "norepart": 10,
     "norepalb": 10,
     "dynamicweights": 0,
+    "learnedblend": 50,
     "debug": 0,
     "genregroups": [
         [
@@ -86,8 +88,9 @@ When `dynamicweights=1` and `debug=1`, the response also includes an `X-Bliss-De
 
 ```json
 {
-    "algorithm": "variance-based",
+    "algorithm": "blended(learned=50%)",
     "num_seeds": 3,
+    "blend_ratio": 50,
     "weights": [
         {"feature": "Tempo", "weight": 0.123},
         {"feature": "Zcr", "weight": 0.045},

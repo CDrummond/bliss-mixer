@@ -38,6 +38,7 @@ const MAX_ARTIST_TRACK_SIM_DIFF: f32 = 0.01;
 struct DynamicWeightsDebug {
     algorithm: String,
     num_seeds: usize,
+    blend_ratio: Option<u16>,
     weights: Vec<FeatureWeight>,
     stats: StatsDebug,
     timing_ms: TimingDebug,
@@ -90,6 +91,7 @@ pub struct MixParams {
     allgenres: Option<u16>,
     forest: Option<u16>,
     dynamicweights: Option<u16>,
+    learnedblend: Option<u16>,
     debug: Option<u16>,
 }
 
@@ -286,6 +288,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
     let allgenres = payload.allgenres.unwrap_or(0);
     let mut useforest = payload.forest.unwrap_or(0);
     let usedynamicweights = payload.dynamicweights.unwrap_or(0);
+    let learnedblend = payload.learnedblend.unwrap_or(50).min(100);
     let wantdebug = payload.debug.unwrap_or(0) == 1;
     let mut seeds: Vec<Track> = Vec::new();
     // Tracks filtered out due to title matching seed or chosen track
@@ -419,22 +422,34 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
         }
 
         // Determine the weight matrix to use
-        let (weight_matrix, algorithm_name): (Option<Array2<f32>>, &str) = if seed_raw_metrics.len() >= 2 {
+        let (weight_matrix, algorithm_name): (Option<Array2<f32>>, String) = if seed_raw_metrics.len() >= 2 {
             // Multi-seed: compute variance-based weight matrix
             let seed_arrays: Vec<Array1<f32>> = seed_raw_metrics.iter()
                 .map(|m| Array1::from_vec(m.to_vec()))
                 .collect();
-            let m = variance_based_weight_matrix(&seed_arrays);
-            if m.is_some() {
-                log::debug!("Using variance-based dynamic weight matrix from {} seeds", seed_raw_metrics.len());
+            let variance_matrix = variance_based_weight_matrix(&seed_arrays);
+
+            match (variance_matrix, learned_matrix.get_ref().as_ref()) {
+                (Some(vm), Some(lm)) => {
+                    // Both available: blend them
+                    let alpha = learnedblend as f32 / 100.0;
+                    let blended = lm * alpha + &vm * (1.0 - alpha);
+                    log::debug!("Blending learned (alpha={:.2}) and variance matrices from {} seeds",
+                                 alpha, seed_raw_metrics.len());
+                    (Some(blended), format!("blended(learned={}%)", learnedblend))
+                }
+                (Some(vm), None) => {
+                    log::debug!("Using variance-based dynamic weight matrix from {} seeds", seed_raw_metrics.len());
+                    (Some(vm), "variance-based".to_string())
+                }
+                _ => (None, "none".to_string())
             }
-            (m, "variance-based")
         } else if learned_matrix.is_some() {
             // Single seed: use the learned Mahalanobis matrix
             log::debug!("Using learned Mahalanobis matrix for single seed");
-            (learned_matrix.get_ref().clone(), "learned-matrix")
+            (learned_matrix.get_ref().clone(), "learned-matrix".to_string())
         } else {
-            (None, "none")
+            (None, "none".to_string())
         };
 
         if let Some(ref matrix) = weight_matrix {
@@ -604,8 +619,9 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
                     })
                     .collect();
                 debug_info = Some(DynamicWeightsDebug {
-                    algorithm: algorithm_name.to_string(),
+                    algorithm: algorithm_name.clone(),
                     num_seeds: seed_raw_metrics.len(),
+                    blend_ratio: if algorithm_name.starts_with("blended") { Some(learnedblend) } else { None },
                     weights: feature_weights,
                     stats,
                     timing_ms: TimingDebug {
