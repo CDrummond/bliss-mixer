@@ -35,7 +35,7 @@ const MAX_ARTIST_TRACKS: usize = 5;
 const MAX_ARTIST_TRACK_SIM_DIFF: f32 = 0.01;
 
 #[derive(Serialize)]
-struct DynamicWeightsDebug {
+struct AdaptiveWeightsDebug {
     algorithm: String,
     num_seeds: usize,
     blend_ratio: Option<u16>,
@@ -90,7 +90,7 @@ pub struct MixParams {
     genregroups: Vec<Vec<String>>,
     allgenres: Option<u16>,
     forest: Option<u16>,
-    dynamicweights: Option<u16>,
+    adaptiveweights: Option<u16>,
     learnedblend: Option<u16>,
     debug: Option<u16>,
 }
@@ -287,7 +287,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
     let genregroups = expand_globbed_genres(&payload.genregroups, &all_db_genres);
     let allgenres = payload.allgenres.unwrap_or(0);
     let mut useforest = payload.forest.unwrap_or(0);
-    let usedynamicweights = payload.dynamicweights.unwrap_or(0);
+    let useadaptiveweights = payload.adaptiveweights.unwrap_or(0);
     let learnedblend = payload.learnedblend.unwrap_or(50).min(100);
     let wantdebug = payload.debug.unwrap_or(0) == 1;
     let mut seeds: Vec<Track> = Vec::new();
@@ -306,7 +306,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
     // Albums from matching tracks. Don't want same album chosen twice, even if
     // norepalb is 0 or album is a VA album.
     let mut chosen_albums: HashSet<String> = HashSet::new();
-    let mut debug_info: Option<DynamicWeightsDebug> = None;
+    let mut debug_info: Option<AdaptiveWeightsDebug> = None;
 
     if count < MIN_COUNT {
         count = MIN_COUNT;
@@ -396,7 +396,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
     }
 
     let mut fseeds: Vec<forest::Track> = Vec::new();
-    if useforest>0 && usedynamicweights==0 && seeds.len()>=MIN_FOR_FOREST {
+    if useforest>0 && useadaptiveweights==0 && seeds.len()>=MIN_FOR_FOREST {
         for seed in seeds.clone() {
             if let Ok(metrics) = db.get_metrics(seed.id) {
                 let track = forest::Track {
@@ -408,8 +408,8 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
         }
     }
 
-    if usedynamicweights == 1 {
-        // Dynamic weighting: compute weight matrix from seed variance, then
+    if useadaptiveweights == 1 {
+        // Adaptive weighting: compute weight matrix from seed variance, then
         // use KD-tree as pre-filter and re-rank candidates with dynamic distances
         let learned_matrix = req.app_data::<web::Data<Option<Array2<f32>>>>().unwrap();
 
@@ -618,7 +618,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
                         weight: matrix[[i, i]],
                     })
                     .collect();
-                debug_info = Some(DynamicWeightsDebug {
+                debug_info = Some(AdaptiveWeightsDebug {
                     algorithm: algorithm_name.clone(),
                     num_seeds: seed_raw_metrics.len(),
                     blend_ratio: if algorithm_name.starts_with("blended") { Some(learnedblend) } else { None },
@@ -635,7 +635,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
             }
         } else {
             // No weight matrix available (single seed, no learned matrix) — fall back to standard
-            log::debug!("Dynamic weighting requested but no weight matrix available, falling back to standard algorithm");
+            log::debug!("Adaptive weighting requested but no weight matrix available, falling back to standard algorithm");
             useforest = 0;
             // Fall through to standard algorithm below
         }
