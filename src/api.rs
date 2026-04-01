@@ -431,11 +431,19 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
 
             match (variance_matrix, learned_matrix.get_ref().as_ref()) {
                 (Some(vm), Some(lm)) => {
-                    // Both available: blend them
-                    let alpha = learnedblend as f32 / 100.0;
-                    let blended = lm * alpha + &vm * (1.0 - alpha);
+                    // Both available: blend them.
+                    // Special-case the extremes to avoid IEEE 754 inf*0.0=NaN when the
+                    // variance matrix has infinite entries (zero-variance features).
+                    let blended = if learnedblend == 100 {
+                        lm.clone()
+                    } else if learnedblend == 0 {
+                        vm
+                    } else {
+                        let alpha = learnedblend as f32 / 100.0;
+                        lm * alpha + &vm * (1.0 - alpha)
+                    };
                     log::debug!("Blending learned (alpha={:.2}) and variance matrices from {} seeds",
-                                 alpha, seed_raw_metrics.len());
+                                 learnedblend as f32 / 100.0, seed_raw_metrics.len());
                     (Some(blended), format!("blended(learned={}%)", learnedblend))
                 }
                 (Some(vm), None) => {
