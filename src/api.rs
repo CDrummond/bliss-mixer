@@ -499,7 +499,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
             log::debug!("Distance calculation: {} tracks scored in {}ms", scored_count, distance_calc_ms);
 
             let t_sort = Instant::now();
-            scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            scored.sort_by(|a, b| a.1.total_cmp(&b.1));
             let sort_ms = t_sort.elapsed().as_millis() as u64;
             log::debug!("Sort: {}ms", sort_ms);
 
@@ -881,7 +881,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
 
         // Too few tracks? Choose some from filtered...
         if chosen.len() < min_count && !filtered.is_empty() {
-            filtered.sort_by(|a, b| a.sim.partial_cmp(&b.sim).unwrap());
+            filtered.sort_by(|a, b| a.sim.total_cmp(&b.sim));
             while chosen.len() < min_count && !filtered.is_empty() {
                 chosen.push(filtered.remove(0));
             }
@@ -889,7 +889,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
     }
 
     // Sort by similarity
-    chosen.sort_by(|a, b| a.sim.partial_cmp(&b.sim).unwrap());
+    chosen.sort_by(|a, b| a.sim.total_cmp(&b.sim));
 
     if shuffle == 1 {
         // Take top 'similarity_count' tracks
