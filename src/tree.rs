@@ -9,7 +9,7 @@
 use kiddo::{ImmutableKdTree, SquaredEuclidean};
 use std::num::NonZero;
 
-pub const DIMENSIONS: usize = 23;
+pub const DIMENSIONS: usize = bliss_audio::NUMBER_FEATURES;
 
 #[derive(Clone)]
 pub struct Tree {

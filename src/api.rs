@@ -9,14 +9,20 @@
 use crate::db;
 use crate::forest;
 use crate::tree;
-use actix_web::{web, HttpRequest, Responder};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use bliss_audio::AnalysisIndex;
+use bliss_audio::playlist::{mahalanobis_distance, variance_based_weight_matrix};
 use chrono::Datelike;
 use globset::Glob;
+use ndarray::{Array1, Array2};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use serde::Deserialize;
+use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::num::NonZero;
+use std::time::Instant;
+use strum::IntoEnumIterator;
 
 const CHRISTMAS: &str = "christmas";
 const VARIOUS: &str = "various";
@@ -28,6 +34,45 @@ const MIN_NUM_SIM: usize = 5000;
 const MAX_ARTIST_TRACKS: usize = 5;
 // KDTree is returning squared-euc distance. So max diff = sqr(0.1) = 0.01
 const MAX_ARTIST_TRACK_SIM_DIFF: f32 = 0.01;
+
+#[derive(Serialize)]
+struct AdaptiveWeightsDebug {
+    algorithm: String,
+    num_seeds: usize,
+    weights: Vec<FeatureWeight>,
+    stats: StatsDebug,
+    timing_ms: TimingDebug,
+}
+
+#[derive(Serialize)]
+struct StatsDebug {
+    db_total: usize,
+    scored: usize,
+    discarded_duration: usize,
+    discarded_bpm: usize,
+    discarded_genre: usize,
+    discarded_xmas: usize,
+    discarded_album: usize,
+    filtered_artist: usize,
+    filtered_album: usize,
+    filtered_title: usize,
+    usable: usize,
+}
+
+#[derive(Serialize)]
+struct TimingDebug {
+    db_load: u64,
+    distance_calc: u64,
+    sort: u64,
+    filter: u64,
+    total: u64,
+}
+
+#[derive(Serialize)]
+struct FeatureWeight {
+    feature: String,
+    weight: f32,
+}
 
 #[derive(Deserialize)]
 pub struct MixParams {
@@ -45,6 +90,8 @@ pub struct MixParams {
     genregroups: Vec<Vec<String>>,
     allgenres: Option<u16>,
     forest: Option<u16>,
+    adaptiveweights: Option<u16>,
+    debug: Option<u16>,
 }
 
 #[derive(Deserialize)]
@@ -199,6 +246,69 @@ fn filter_genre(track_genres: &HashSet<String>, acceptable_genres: &HashSet<Stri
     rv
 }
 
+fn discard_reason(
+    trk: &Track,
+    min: u32,
+    max: u32,
+    maxbpmdiff: i16,
+    bpm_range: Option<(i16, i16)>,
+    seed_bpm: Option<i16>,
+    filtergenre: u16,
+    acceptable_genres: &HashSet<String>,
+    all_genres_from_groups: &HashSet<String>,
+    filterxmas: u16,
+    chosen_albums: Option<&HashSet<String>>,
+) -> Option<&'static str> {
+    if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
+        return Some("duration");
+    }
+
+    if maxbpmdiff > 0 && trk.bpm > 0 {
+        if let Some((minbpm, maxbpm)) = bpm_range {
+            if minbpm > 0 && maxbpm > 0 && (trk.bpm < (minbpm - maxbpmdiff) || trk.bpm > (maxbpm + maxbpmdiff)) {
+                return Some("bpm");
+            }
+        } else if let Some(seed_bpm) = seed_bpm {
+            if seed_bpm > 0 && (trk.bpm - seed_bpm).abs() > maxbpmdiff {
+                return Some("bpm");
+            }
+        }
+    }
+
+    if filtergenre == 1 && filter_genre(&trk.genres, acceptable_genres, all_genres_from_groups) {
+        return Some("genre");
+    }
+
+    if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
+        return Some("christmas");
+    }
+
+    if let Some(albums) = chosen_albums {
+        if albums.contains(&trk.album) {
+            return Some("album");
+        }
+    }
+
+    None
+}
+
+fn log_discard(reason: &str, trk: &Track) {
+    log(&format!("DISCARD({})", reason), trk);
+}
+
+impl StatsDebug {
+    fn record_discard(&mut self, reason: &str) {
+        match reason {
+            "duration" => self.discarded_duration += 1,
+            "bpm" => self.discarded_bpm += 1,
+            "genre" => self.discarded_genre += 1,
+            "christmas" => self.discarded_xmas += 1,
+            "album" => self.discarded_album += 1,
+            _ => {}
+        }
+    }
+}
+
 fn expand_globbed_genres(genregroups: &Vec<Vec<String>>, all_db_genres: &HashSet<String>) -> Vec<HashSet<String>> {
     let mut expanded: Vec<HashSet<String>> = Vec::new();
 
@@ -222,7 +332,7 @@ fn log(reason: &str, trk: &Track) {
     log::debug!("{} File:{}, Title:{}, Album/Artist:{}, Dur:{}, Sim:{:.18}, Genres:{:?}, BPM:{}", reason, trk.file, trk.title, trk.album, trk.duration, trk.sim, trk.genres, trk.bpm);
 }
 
-pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Responder {
+pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpResponse {
     let tree = req.app_data::<web::Data<tree::Tree>>().unwrap();
     let all_db_genres = req.app_data::<web::Data<HashSet<String>>>().unwrap();
     let db_path = req.app_data::<web::Data<String>>().unwrap();
@@ -239,6 +349,8 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     let genregroups = expand_globbed_genres(&payload.genregroups, &all_db_genres);
     let allgenres = payload.allgenres.unwrap_or(0);
     let mut useforest = payload.forest.unwrap_or(0);
+    let useadaptiveweights = payload.adaptiveweights.unwrap_or(0);
+    let wantdebug = payload.debug.unwrap_or(0) == 1;
     let mut seeds: Vec<Track> = Vec::new();
     // Tracks filtered out due to title matching seed or chosen track
     let mut filter_out_titles: HashSet<String> = HashSet::new();
@@ -255,6 +367,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     // Albums from matching tracks. Don't want same album chosen twice, even if
     // norepalb is 0 or album is a VA album.
     let mut chosen_albums: HashSet<String> = HashSet::new();
+    let mut debug_info: Option<AdaptiveWeightsDebug> = None;
 
     if count < MIN_COUNT {
         count = MIN_COUNT;
@@ -344,7 +457,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     }
 
     let mut fseeds: Vec<forest::Track> = Vec::new();
-    if useforest>0 && seeds.len()>=MIN_FOR_FOREST {
+    if useforest>0 && useadaptiveweights==0 && seeds.len()>=MIN_FOR_FOREST {
         for seed in seeds.clone() {
             if let Ok(metrics) = db.get_metrics(seed.id) {
                 let track = forest::Track {
@@ -356,6 +469,223 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         }
     }
 
+    if useadaptiveweights == 1 {
+        // Adaptive weighting: compute weight matrix from seed variance, then
+        // scan and re-rank candidates with adaptive distances.
+
+        // Collect raw (unweighted) metrics for all seeds
+        let mut seed_raw_metrics: Vec<[f32; tree::DIMENSIONS]> = Vec::new();
+        for seed in &seeds {
+            if let Ok(raw) = db.get_raw_metrics(seed.id) {
+                seed_raw_metrics.push(raw);
+            }
+        }
+
+        // Determine the weight matrix to use
+        let (weight_matrix, algorithm_name): (Option<Array2<f32>>, String) = if seed_raw_metrics.len() >= 2 {
+            // Multi-seed: compute variance-based weight matrix
+            let seed_arrays: Vec<Array1<f32>> = seed_raw_metrics.iter()
+                .map(|m| Array1::from_vec(m.to_vec()))
+                .collect();
+            match variance_based_weight_matrix(&seed_arrays) {
+                Ok(matrix) => {
+                    log::debug!("Using variance-based adaptive weight matrix from {} seeds", seed_raw_metrics.len());
+                    (Some(matrix), "variance-based".to_string())
+                }
+                Err(err) => {
+                    log::warn!("Failed to build variance-based matrix: {}. Falling back to standard algorithm.", err);
+                    (None, "none".to_string())
+                }
+            }
+        } else {
+            (None, "none".to_string())
+        };
+
+        if let Some(ref matrix) = weight_matrix {
+            log::debug!("Using adaptive weighting algorithm");
+            let t_total = Instant::now();
+
+            if wantdebug {
+                // Build debug info with the diagonal weights
+                let weights_summary: Vec<String> = AnalysisIndex::iter().enumerate()
+                    .filter(|&(i, _)| matrix[[i, i]] > 0.01)
+                    .map(|(i, idx)| format!("{:?}={:.3}", idx, matrix[[i, i]]))
+                    .collect();
+                log::debug!("Adaptive weights (non-trivial): {}", weights_summary.join(", "));
+            }
+
+            // Compute the mean of seed raw metrics (to use as the "ideal" point)
+            let mut mean_raw = [0.0f32; tree::DIMENSIONS];
+            for raw in &seed_raw_metrics {
+                for i in 0..tree::DIMENSIONS {
+                    mean_raw[i] += raw[i];
+                }
+            }
+            for i in 0..tree::DIMENSIONS {
+                mean_raw[i] /= seed_raw_metrics.len() as f32;
+            }
+
+            // Full DB scan: compute Mahalanobis distance for every track
+            let t_db = Instant::now();
+            let all_raw = db.get_all_raw_metrics();
+            let db_load_ms = t_db.elapsed().as_millis() as u64;
+            log::debug!("DB load: {} tracks in {}ms", all_raw.len(), db_load_ms);
+
+            // Score all tracks using adaptive Mahalanobis distance
+            let t_dist = Instant::now();
+            let mean_arr = Array1::from_vec(mean_raw.to_vec());
+            let mut scored: Vec<(u64, f32)> = all_raw
+                .par_iter()
+                .filter_map(|(id, raw)| {
+                    if filter_out_ids.contains(id) {
+                        None
+                    } else {
+                        let raw_arr = Array1::from_vec(raw.to_vec());
+                        let dist = mahalanobis_distance(&mean_arr, &raw_arr, matrix);
+                        Some((*id, dist))
+                    }
+                })
+                .collect();
+            let distance_calc_ms = t_dist.elapsed().as_millis() as u64;
+            let scored_count = scored.len();
+            log::debug!("Distance calculation: {} tracks scored in {}ms", scored_count, distance_calc_ms);
+
+            let t_sort = Instant::now();
+            scored.sort_by(|a, b| a.1.total_cmp(&b.1));
+            let sort_ms = t_sort.elapsed().as_millis() as u64;
+            log::debug!("Sort: {}ms", sort_ms);
+
+            // Apply filters and build chosen list
+            let t_filter = Instant::now();
+            let mut stats = StatsDebug {
+                db_total: all_raw.len(),
+                scored: scored_count,
+                discarded_duration: 0,
+                discarded_bpm: 0,
+                discarded_genre: 0,
+                discarded_xmas: 0,
+                discarded_album: 0,
+                filtered_artist: 0,
+                filtered_album: 0,
+                filtered_title: 0,
+                usable: 0,
+            };
+            for (cid, dist) in scored {
+                filter_out_ids.insert(cid);
+                let mut trk: Track = get_track_from_id(&db, cid);
+                trk.sim = dist;
+                if let Some(reason) = discard_reason(
+                    &trk,
+                    min,
+                    max,
+                    maxbpmdiff,
+                    Some((minbpm, maxbpm)),
+                    None,
+                    filtergenre,
+                    &acceptable_genres,
+                    &all_genres_from_groups,
+                    filterxmas,
+                    Some(&chosen_albums),
+                ) {
+                    log_discard(reason, &trk);
+                    stats.record_discard(reason);
+                    continue;
+                }
+                let track_file = TrackFile {
+                    file: trk.file.clone(),
+                    sim: trk.sim,
+                };
+                if norepart > 0 && filter_out_artists.contains(&trk.artist) {
+                    log("FILTER(artist)", &trk);
+                    stats.filtered_artist += 1;
+
+                    if shuffle == 1 {
+                        match matched_artists.get_mut(&trk.artist) {
+                            Some(artist) => {
+                                if artist.tracks.len() < MAX_ARTIST_TRACKS && (dist - artist.tracks[0].sim).abs() < MAX_ARTIST_TRACK_SIM_DIFF {
+                                    artist.tracks.push(track_file.clone())
+                                }
+                            }
+                            None => {}
+                        }
+                    }
+
+                    filtered.push(track_file);
+                    continue;
+                }
+                if !trk.is_various && norepalb > 0 && filter_out_albums.contains(&trk.album) {
+                    log("FILTER(album)", &trk);
+                    stats.filtered_album += 1;
+                    filtered.push(track_file);
+                    continue;
+                }
+                if filter_out_titles.contains(&trk.title) {
+                    log("FILTER(title)", &trk);
+                    stats.filtered_title += 1;
+                    filtered.push(track_file);
+                    continue;
+                }
+                log("USABLE", &trk);
+                stats.usable += 1;
+                filter_out_titles.insert(trk.title.clone());
+                if norepart > 0 {
+                    filter_out_artists.insert(trk.artist.clone());
+                }
+                if norepalb > 0 {
+                    filter_out_albums.insert(trk.album.clone());
+                }
+                chosen_albums.insert(trk.album.clone());
+                chosen.push(track_file.clone());
+
+                if shuffle == 1 {
+                    let mut matched_artist = MatchedArtist {
+                        pos: chosen.len() - 1,
+                        tracks: Vec::new(),
+                    };
+                    matched_artist.tracks.push(track_file);
+                    matched_artists.insert(trk.artist.clone(), matched_artist);
+                }
+
+                if chosen.len()>=similarity_count {
+                    break;
+                }
+            }
+            let filter_ms = t_filter.elapsed().as_millis() as u64;
+            let total_ms = t_total.elapsed().as_millis() as u64;
+            log::debug!("Filter+select: {}ms, Total adaptive weights: {}ms", filter_ms, total_ms);
+
+            // Store debug info only if requested
+            if wantdebug {
+                let feature_weights: Vec<FeatureWeight> = AnalysisIndex::iter().enumerate()
+                    .map(|(i, idx)| FeatureWeight {
+                        feature: format!("{:?}", idx),
+                        weight: matrix[[i, i]],
+                    })
+                    .collect();
+                debug_info = Some(AdaptiveWeightsDebug {
+                    algorithm: algorithm_name.clone(),
+                    num_seeds: seed_raw_metrics.len(),
+                    weights: feature_weights,
+                    stats,
+                    timing_ms: TimingDebug {
+                        db_load: db_load_ms,
+                        distance_calc: distance_calc_ms,
+                        sort: sort_ms,
+                        filter: filter_ms,
+                        total: total_ms,
+                    },
+                });
+            }
+        } else {
+            // Adaptive weighting needs at least two seed tracks.
+            log::debug!("Adaptive weighting requested but no weight matrix available, falling back to standard algorithm");
+            useforest = 0;
+            // Fall through to standard algorithm below
+        }
+    }
+
+    // Only run forest/standard if adaptive weighting didn't produce results
+    if chosen.is_empty() {
     if fseeds.len()>=MIN_FOR_FOREST {
         log::debug!("Using extended isolation forest algorithm");
         let mut forest:tree::AnalysisDetails = tree::AnalysisDetails::new();
@@ -384,24 +714,20 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
             }
             filter_out_ids.insert(track.id);
             let trk: Track = get_track_from_id(&db, track.id);
-            if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
-                log("DISCARD(duration)", &trk);
-                continue;
-            }
-            if maxbpmdiff > 0 && minbpm > 0 && maxbpm > 0 && trk.bpm>0 && (trk.bpm<(minbpm-maxbpmdiff) || trk.bpm>(maxbpm+maxbpmdiff)) {
-                log("DISCARD(bpm)", &trk);
-                continue;
-            }
-            if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
-                log("DISCARD(genre)", &trk);
-                continue;
-            }
-            if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
-                log("DISCARD(christmas)", &trk);
-                continue;
-            }
-            if chosen_albums.contains(&trk.album) {
-                log("DISCARD(album)", &trk);
+            if let Some(reason) = discard_reason(
+                &trk,
+                min,
+                max,
+                maxbpmdiff,
+                Some((minbpm, maxbpm)),
+                None,
+                filtergenre,
+                &acceptable_genres,
+                &all_genres_from_groups,
+                filterxmas,
+                Some(&chosen_albums),
+            ) {
+                log_discard(reason, &trk);
                 continue;
             }
             let track_file = TrackFile {
@@ -479,24 +805,20 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
                         filter_out_ids.insert(sim_track.id);
                         let mut trk: Track = get_track_from_id(&db, sim_track.id);
                         trk.sim = sim_track.sim;
-                        if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
-                            log("DISCARD(duration)", &trk);
-                            continue;
-                        }
-                        if maxbpmdiff > 0 && trk.bpm> 0 && seed.bpm>0 && (trk.bpm-seed.bpm).abs()>maxbpmdiff {
-                            log("DISCARD(bpm)", &trk);
-                            continue;
-                        }
-                        if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
-                            log("DISCARD(genre)", &trk);
-                            continue;
-                        }
-                        if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
-                            log("DISCARD(christmas)", &trk);
-                            continue;
-                        }
-                        if chosen_albums.contains(&trk.album) {
-                            log("DISCARD(album)", &trk);
+                        if let Some(reason) = discard_reason(
+                            &trk,
+                            min,
+                            max,
+                            maxbpmdiff,
+                            None,
+                            Some(seed.bpm),
+                            filtergenre,
+                            &acceptable_genres,
+                            &all_genres_from_groups,
+                            filterxmas,
+                            Some(&chosen_albums),
+                        ) {
+                            log_discard(reason, &trk);
                             continue;
                         }
                         let track_file = TrackFile {
@@ -566,6 +888,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
             }
         }
     }
+    } // end forest/standard fallback
 
     db.close();
 
@@ -593,7 +916,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
 
         // Too few tracks? Choose some from filtered...
         if chosen.len() < min_count && !filtered.is_empty() {
-            filtered.sort_by(|a, b| a.sim.partial_cmp(&b.sim).unwrap());
+            filtered.sort_by(|a, b| a.sim.total_cmp(&b.sim));
             while chosen.len() < min_count && !filtered.is_empty() {
                 chosen.push(filtered.remove(0));
             }
@@ -601,7 +924,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
     }
 
     // Sort by similarity
-    chosen.sort_by(|a, b| a.sim.partial_cmp(&b.sim).unwrap());
+    chosen.sort_by(|a, b| a.sim.total_cmp(&b.sim));
 
     if shuffle == 1 {
         // Take top 'similarity_count' tracks
@@ -618,7 +941,15 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> impl Respon
         resp += &track.file;
         resp += "\n";
     }
-    resp
+
+    let mut http_resp = HttpResponse::Ok();
+    if let Some(di) = debug_info {
+        if let Ok(json) = serde_json::to_string(&di) {
+            log::debug!("Adaptive weights debug: {}", json);
+            http_resp.set_header("X-Bliss-Debug", json);
+        }
+    }
+    http_resp.body(resp)
 }
 
 pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Responder {
@@ -680,24 +1011,40 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
             for sim_track in sim_tracks {
                 let mut trk: Track = get_track_from_id(&db, sim_track.id);
                 trk.sim = sim_track.sim;
-                if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
-                    log("DISCARD(duration)", &trk);
-                    continue;
-                }
-                if maxbpmdiff > 0 && trk.bpm> 0 && seed.bpm>0 && (trk.bpm-seed.bpm).abs()>maxbpmdiff {
-                    log("DISCARD(bpm)", &trk);
+                if let Some(reason) = discard_reason(
+                    &trk,
+                    min,
+                    max,
+                    maxbpmdiff,
+                    None,
+                    Some(seed.bpm),
+                    0,
+                    &acceptable_genres,
+                    &all_genres_from_groups,
+                    0,
+                    None,
+                ) {
+                    log_discard(reason, &trk);
                     continue;
                 }
                 if filter_out_titles.contains(&trk.title) {
                     log("FILTER(title)", &trk);
                     continue;
                 }
-                if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
-                    log("DISCARD(genre)", &trk);
-                    continue;
-                }
-                if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
-                    log("DISCARD(christmas)", &trk);
+                if let Some(reason) = discard_reason(
+                    &trk,
+                    0,
+                    0,
+                    0,
+                    None,
+                    None,
+                    filtergenre,
+                    &acceptable_genres,
+                    &all_genres_from_groups,
+                    filterxmas,
+                    None,
+                ) {
+                    log_discard(reason, &trk);
                     continue;
                 }
                 chosen.push(trk.file);
