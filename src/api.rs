@@ -17,6 +17,7 @@ use globset::Glob;
 use ndarray::{Array1, Array2};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::num::NonZero;
@@ -470,15 +471,18 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
             // Score all tracks using adaptive Mahalanobis distance
             let t_dist = Instant::now();
             let mean_arr = Array1::from_vec(mean_raw.to_vec());
-            let mut scored: Vec<(u64, f32)> = Vec::new();
-            for (id, raw) in &all_raw {
-                if filter_out_ids.contains(id) {
-                    continue;
-                }
-                let raw_arr = Array1::from_vec(raw.to_vec());
-                let dist = mahalanobis_distance(&mean_arr, &raw_arr, matrix);
-                scored.push((*id, dist));
-            }
+            let mut scored: Vec<(u64, f32)> = all_raw
+                .par_iter()
+                .filter_map(|(id, raw)| {
+                    if filter_out_ids.contains(id) {
+                        None
+                    } else {
+                        let raw_arr = Array1::from_vec(raw.to_vec());
+                        let dist = mahalanobis_distance(&mean_arr, &raw_arr, matrix);
+                        Some((*id, dist))
+                    }
+                })
+                .collect();
             let distance_calc_ms = t_dist.elapsed().as_millis() as u64;
             let scored_count = scored.len();
             log::debug!("Distance calculation: {} tracks scored in {}ms", scored_count, distance_calc_ms);
