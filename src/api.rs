@@ -949,6 +949,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
             http_resp.set_header("X-Bliss-Debug", json);
         }
     }
+    http_resp.content_type("text/plain; charset=utf-8");
     http_resp.body(resp)
 }
 
@@ -1061,7 +1062,10 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
         resp += &track;
         resp += "\n";
     }
-    resp
+
+    let mut http_resp = HttpResponse::Ok();
+    http_resp.content_type("text/plain; charset=utf-8");
+    http_resp.body(resp)
 }
 
 pub async fn ready() -> impl Responder {

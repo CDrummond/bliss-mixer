@@ -2,6 +2,7 @@
 -----
 1. Add adaptive weighting for mix selection. Thanks to chrober for
    implementing.
+2. Set utf-8 in response header.
 
 0.7.0
 -----
