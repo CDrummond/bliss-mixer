@@ -246,6 +246,69 @@ fn filter_genre(track_genres: &HashSet<String>, acceptable_genres: &HashSet<Stri
     rv
 }
 
+fn discard_reason(
+    trk: &Track,
+    min: u32,
+    max: u32,
+    maxbpmdiff: i16,
+    bpm_range: Option<(i16, i16)>,
+    seed_bpm: Option<i16>,
+    filtergenre: u16,
+    acceptable_genres: &HashSet<String>,
+    all_genres_from_groups: &HashSet<String>,
+    filterxmas: u16,
+    chosen_albums: Option<&HashSet<String>>,
+) -> Option<&'static str> {
+    if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
+        return Some("duration");
+    }
+
+    if maxbpmdiff > 0 && trk.bpm > 0 {
+        if let Some((minbpm, maxbpm)) = bpm_range {
+            if minbpm > 0 && maxbpm > 0 && (trk.bpm < (minbpm - maxbpmdiff) || trk.bpm > (maxbpm + maxbpmdiff)) {
+                return Some("bpm");
+            }
+        } else if let Some(seed_bpm) = seed_bpm {
+            if seed_bpm > 0 && (trk.bpm - seed_bpm).abs() > maxbpmdiff {
+                return Some("bpm");
+            }
+        }
+    }
+
+    if filtergenre == 1 && filter_genre(&trk.genres, acceptable_genres, all_genres_from_groups) {
+        return Some("genre");
+    }
+
+    if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
+        return Some("christmas");
+    }
+
+    if let Some(albums) = chosen_albums {
+        if albums.contains(&trk.album) {
+            return Some("album");
+        }
+    }
+
+    None
+}
+
+fn log_discard(reason: &str, trk: &Track) {
+    log(&format!("DISCARD({})", reason), trk);
+}
+
+impl StatsDebug {
+    fn record_discard(&mut self, reason: &str) {
+        match reason {
+            "duration" => self.discarded_duration += 1,
+            "bpm" => self.discarded_bpm += 1,
+            "genre" => self.discarded_genre += 1,
+            "christmas" => self.discarded_xmas += 1,
+            "album" => self.discarded_album += 1,
+            _ => {}
+        }
+    }
+}
+
 fn expand_globbed_genres(genregroups: &Vec<Vec<String>>, all_db_genres: &HashSet<String>) -> Vec<HashSet<String>> {
     let mut expanded: Vec<HashSet<String>> = Vec::new();
 
@@ -511,29 +574,21 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
                 filter_out_ids.insert(cid);
                 let mut trk: Track = get_track_from_id(&db, cid);
                 trk.sim = dist;
-                if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
-                    log("DISCARD(duration)", &trk);
-                    stats.discarded_duration += 1;
-                    continue;
-                }
-                if maxbpmdiff > 0 && minbpm > 0 && maxbpm > 0 && trk.bpm>0 && (trk.bpm<(minbpm-maxbpmdiff) || trk.bpm>(maxbpm+maxbpmdiff)) {
-                    log("DISCARD(bpm)", &trk);
-                    stats.discarded_bpm += 1;
-                    continue;
-                }
-                if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
-                    log("DISCARD(genre)", &trk);
-                    stats.discarded_genre += 1;
-                    continue;
-                }
-                if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
-                    log("DISCARD(christmas)", &trk);
-                    stats.discarded_xmas += 1;
-                    continue;
-                }
-                if chosen_albums.contains(&trk.album) {
-                    log("DISCARD(album)", &trk);
-                    stats.discarded_album += 1;
+                if let Some(reason) = discard_reason(
+                    &trk,
+                    min,
+                    max,
+                    maxbpmdiff,
+                    Some((minbpm, maxbpm)),
+                    None,
+                    filtergenre,
+                    &acceptable_genres,
+                    &all_genres_from_groups,
+                    filterxmas,
+                    Some(&chosen_albums),
+                ) {
+                    log_discard(reason, &trk);
+                    stats.record_discard(reason);
                     continue;
                 }
                 let track_file = TrackFile {
@@ -659,24 +714,20 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
             }
             filter_out_ids.insert(track.id);
             let trk: Track = get_track_from_id(&db, track.id);
-            if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
-                log("DISCARD(duration)", &trk);
-                continue;
-            }
-            if maxbpmdiff > 0 && minbpm > 0 && maxbpm > 0 && trk.bpm>0 && (trk.bpm<(minbpm-maxbpmdiff) || trk.bpm>(maxbpm+maxbpmdiff)) {
-                log("DISCARD(bpm)", &trk);
-                continue;
-            }
-            if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
-                log("DISCARD(genre)", &trk);
-                continue;
-            }
-            if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
-                log("DISCARD(christmas)", &trk);
-                continue;
-            }
-            if chosen_albums.contains(&trk.album) {
-                log("DISCARD(album)", &trk);
+            if let Some(reason) = discard_reason(
+                &trk,
+                min,
+                max,
+                maxbpmdiff,
+                Some((minbpm, maxbpm)),
+                None,
+                filtergenre,
+                &acceptable_genres,
+                &all_genres_from_groups,
+                filterxmas,
+                Some(&chosen_albums),
+            ) {
+                log_discard(reason, &trk);
                 continue;
             }
             let track_file = TrackFile {
@@ -754,24 +805,20 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
                         filter_out_ids.insert(sim_track.id);
                         let mut trk: Track = get_track_from_id(&db, sim_track.id);
                         trk.sim = sim_track.sim;
-                        if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
-                            log("DISCARD(duration)", &trk);
-                            continue;
-                        }
-                        if maxbpmdiff > 0 && trk.bpm> 0 && seed.bpm>0 && (trk.bpm-seed.bpm).abs()>maxbpmdiff {
-                            log("DISCARD(bpm)", &trk);
-                            continue;
-                        }
-                        if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
-                            log("DISCARD(genre)", &trk);
-                            continue;
-                        }
-                        if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
-                            log("DISCARD(christmas)", &trk);
-                            continue;
-                        }
-                        if chosen_albums.contains(&trk.album) {
-                            log("DISCARD(album)", &trk);
+                        if let Some(reason) = discard_reason(
+                            &trk,
+                            min,
+                            max,
+                            maxbpmdiff,
+                            None,
+                            Some(seed.bpm),
+                            filtergenre,
+                            &acceptable_genres,
+                            &all_genres_from_groups,
+                            filterxmas,
+                            Some(&chosen_albums),
+                        ) {
+                            log_discard(reason, &trk);
                             continue;
                         }
                         let track_file = TrackFile {
@@ -964,24 +1011,40 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
             for sim_track in sim_tracks {
                 let mut trk: Track = get_track_from_id(&db, sim_track.id);
                 trk.sim = sim_track.sim;
-                if (min > 0 && trk.duration < min) || (max > 0 && trk.duration > max) {
-                    log("DISCARD(duration)", &trk);
-                    continue;
-                }
-                if maxbpmdiff > 0 && trk.bpm> 0 && seed.bpm>0 && (trk.bpm-seed.bpm).abs()>maxbpmdiff {
-                    log("DISCARD(bpm)", &trk);
+                if let Some(reason) = discard_reason(
+                    &trk,
+                    min,
+                    max,
+                    maxbpmdiff,
+                    None,
+                    Some(seed.bpm),
+                    0,
+                    &acceptable_genres,
+                    &all_genres_from_groups,
+                    0,
+                    None,
+                ) {
+                    log_discard(reason, &trk);
                     continue;
                 }
                 if filter_out_titles.contains(&trk.title) {
                     log("FILTER(title)", &trk);
                     continue;
                 }
-                if filtergenre == 1 && filter_genre(&trk.genres, &acceptable_genres, &all_genres_from_groups) {
-                    log("DISCARD(genre)", &trk);
-                    continue;
-                }
-                if filterxmas == 1 && trk.genres.contains(CHRISTMAS) {
-                    log("DISCARD(christmas)", &trk);
+                if let Some(reason) = discard_reason(
+                    &trk,
+                    0,
+                    0,
+                    0,
+                    None,
+                    None,
+                    filtergenre,
+                    &acceptable_genres,
+                    &all_genres_from_groups,
+                    filterxmas,
+                    None,
+                ) {
+                    log_discard(reason, &trk);
                     continue;
                 }
                 chosen.push(trk.file);
