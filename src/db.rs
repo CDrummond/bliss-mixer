@@ -58,20 +58,9 @@ fn adjust(vals: [f32;tree::DIMENSIONS]) -> [f32;tree::DIMENSIONS] {
 
 impl Db {
     pub fn new(path: &String) -> Self {
-        let conn = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ).unwrap();
-
-        // Apply performance pragmas for read-only operations
-        conn.execute_batch(
-            "PRAGMA query_only = ON;
-             PRAGMA journal_mode = OFF;
-             PRAGMA synchronous = OFF;
-             PRAGMA temp_store = MEMORY;"
-        ).unwrap();
-
-        Self { conn }
+        Self {
+            conn: Connection::open(path).unwrap(),
+        }
     }
 
     pub fn close(self) {

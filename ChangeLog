@@ -1,6 +1,7 @@
 0.8.0
 -----
-1. Open DB read-only.
+1. Add adaptive weighting for mix selection. Thanks to chrober for
+   implementing.
 
 0.7.0
 -----
