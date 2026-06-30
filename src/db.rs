@@ -7,7 +7,7 @@
  **/
 
 use crate::tree;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use std::collections::HashSet;
 
 pub static mut WEIGHTS: [f32;tree::DIMENSIONS] = [1.0;tree::DIMENSIONS];
