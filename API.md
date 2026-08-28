@@ -83,6 +83,18 @@ ArtistP/AlbumH/Track10.ogg
 ArtistF/AlbumE/Track2.ogg
 ```
 
+When `json=1`:
+
+```json
+[
+    { "file":"ArtistZ/AlbumY/Track5.ogg", "sim":"0.012345" },
+    { "file":"ArtistW/AlbumG/Track9.ogg", "sim":"0.012445" },
+    { "file":"ArtistD/AlbumA/Track2.ogg", "sim":"0.0134567" },
+    { "file":"ArtistP/AlbumH/Track10.ogg", "sim":"0.0134678" },
+    { "file":"ArtistF/AlbumE/Track2.ogg", "sim":"0.0234567" }
+]
+```
+
 When `adaptiveweights=1` and `debug=1`, the response also includes an `X-Bliss-Debug` header:
 
 ```json
@@ -117,17 +129,6 @@ When `adaptiveweights=1` and `debug=1`, the response also includes an `X-Bliss-D
 }
 ```
 
-When `json=1`:
-
-```json
-[
-    { "file":"ArtistZ/AlbumY/Track5.ogg", "sim":"0.012345" },
-    { "file":"ArtistW/AlbumG/Track9.ogg", "sim":"0.012445" },
-    { "file":"ArtistD/AlbumA/Track2.ogg", "sim":"0.0134567" },
-    { "file":"ArtistP/AlbumH/Track10.ogg", "sim":"0.0134678" },
-    { "file":"ArtistF/AlbumE/Track2.ogg", "sim":"0.0234567" }
-]
-```
 
 ## List
 
