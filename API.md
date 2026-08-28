@@ -4,7 +4,7 @@ BlissMixer provides a simple HTTP API for the mixing tracks and getting list of 
 
 ## Mix
 
-This API is used to provide a list of tracks based upon a provied list of seed tracks. This is the main
+This API is used to provide a list of tracks based upon a provided list of seed tracks. This is the main
 API used by the Lyrion `Don't Stop The Music` mixer. API request payload is a JSON string, and the
 response is a new-line separated list of tracks.
 
@@ -22,7 +22,7 @@ response is a new-line separated list of tracks.
 | forest      | Bool (1/0)                | Use `extended isolation forest` when 4 (or more) seed tracks. | `0`             |
 | norepart    | Int                       | Don't repeat an artist for N tracks.                          | `0`             |
 | norepalb    | Int                       | Don't repeat an album for N tracks.                           | `0`             |
-| genregroups | Array of array of strings | List of genre groups, used when filering on genre.            | _(mandatory)_   |
+| genregroups | Array of array of strings | List of genre groups, used when filtering on genre.            | _(mandatory)_   |
 | allgenres   | Bool (1/0)                | When checking if a track is in a genre group, should group contain all of track's genres or any of track's genres. | `0`           |
 | adaptiveweights | Bool (1/0)            | Use adaptive weighting instead of static weights. Requires 2+ seed tracks. | `0` |
 | debug       | Bool (1/0)                | Include debug diagnostics in `X-Bliss-Debug` response header (only applies when `adaptiveweights=1`). | `0` |
