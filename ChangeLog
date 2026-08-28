@@ -1,3 +1,8 @@
+0.8.1
+-----
+1. Optionally return JSON object as response - array of files & similarity
+   score.
+
 0.8.0
 -----
 1. Add adaptive weighting for mix selection. Thanks to chrober for

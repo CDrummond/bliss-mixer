@@ -23,6 +23,7 @@ use std::collections::{HashMap, HashSet};
 use std::num::NonZero;
 use std::time::Instant;
 use strum::IntoEnumIterator;
+use serde_json::json;
 
 const CHRISTMAS: &str = "christmas";
 const VARIOUS: &str = "various";
@@ -92,6 +93,7 @@ pub struct MixParams {
     forest: Option<u16>,
     adaptiveweights: Option<u16>,
     debug: Option<u16>,
+    json: Option<u16>,
 }
 
 #[derive(Deserialize)]
@@ -106,6 +108,7 @@ pub struct ListParams {
     genregroups: Vec<Vec<String>>,
     allgenres: Option<u16>,
     byartist: i16,
+    json: Option<u16>,
 }
 
 #[derive(Clone)]
@@ -127,6 +130,7 @@ struct Track {
 }
 
 #[derive(Clone)]
+#[derive(Serialize)]
 struct TrackFile {
     file: String,
     sim: f32,
@@ -368,6 +372,7 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
     // norepalb is 0 or album is a VA album.
     let mut chosen_albums: HashSet<String> = HashSet::new();
     let mut debug_info: Option<AdaptiveWeightsDebug> = None;
+    let json_output = payload.json.unwrap_or(0) == 1;
 
     if count < MIN_COUNT {
         count = MIN_COUNT;
@@ -936,12 +941,6 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
     // Take 'count' tracks
     chosen.truncate(count);
 
-    let mut resp = String::new();
-    for track in chosen {
-        resp += &track.file;
-        resp += "\n";
-    }
-
     let mut http_resp = HttpResponse::Ok();
     if let Some(di) = debug_info {
         if let Ok(json) = serde_json::to_string(&di) {
@@ -949,7 +948,19 @@ pub async fn mix(req: HttpRequest, payload: web::Json<MixParams>) -> HttpRespons
             http_resp.set_header("X-Bliss-Debug", json);
         }
     }
-    http_resp.content_type("text/plain; charset=utf-8");
+
+    let mut resp = String::new();
+    if json_output {
+        http_resp.content_type("application/json; charset=utf-8");
+        resp = json!(chosen).to_string();
+    } else {
+        http_resp.content_type("text/plain; charset=utf-8");
+        for track in chosen {
+            resp += &track.file;
+            resp += "\n";
+        }
+    }
+
     http_resp.body(resp)
 }
 
@@ -971,10 +982,11 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
     let mut all_genres_from_groups: HashSet<String> = HashSet::new();
     let mut chosen: Vec<String> = Vec::new();
     let mut filter_out_titles: HashSet<String> = HashSet::new();
+    let json_output = payload.json.unwrap_or(0) == 1;
 
     if filterxmas == 1 && chrono::Local::now().month() == 12 {
-         filterxmas = 0;
-     }
+        filterxmas = 0;
+    }
 
     if count < MIN_COUNT {
         count = MIN_COUNT;
@@ -1057,14 +1069,19 @@ pub async fn list(req: HttpRequest, payload: web::Json<ListParams>) -> impl Resp
         }
     }
 
+    let mut http_resp = HttpResponse::Ok();
     let mut resp = String::new();
-    for track in chosen {
-        resp += &track;
-        resp += "\n";
+    if json_output {
+        http_resp.content_type("application/json; charset=utf-8");
+        resp = json!(chosen).to_string();
+    } else {
+        http_resp.content_type("text/plain; charset=utf-8");
+        for track in chosen {
+            resp += &track;
+            resp += "\n";
+        }
     }
 
-    let mut http_resp = HttpResponse::Ok();
-    http_resp.content_type("text/plain; charset=utf-8");
     http_resp.body(resp)
 }
 
